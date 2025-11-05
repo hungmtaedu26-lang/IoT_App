@@ -48,6 +48,14 @@ services:
     volumes:
       - minio-data:/data
   
+  hivemq:
+    image: hivemq/hivemq-ce:latest # Community Edition
+    restart: always
+    ports:
+      - "1883:1883" # Cổng MQTT chính
+      - "8080:8080" # Giao diện quản lý
+      - "8883:8883" # Cổng MQTT qua WebSockets (cho dashboard)
+      
   # --- CÁC MICROSERVICES BÊN TRONG DOCKER ---
   database_worker:
     build: ./services/database_worker
@@ -55,7 +63,7 @@ services:
     depends_on:
       - mariadb
       - kafka
-
+  
   storage_worker:
     build: ./services/storage_worker
     restart: always
