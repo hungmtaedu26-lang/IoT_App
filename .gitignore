@@ -1,0 +1,77 @@
+# ----------------------------------------------------------------
+# TỆP .gitignore MẪU CHO DỰ ÁN IOT MICROSERVICES
+# ----------------------------------------------------------------
+
+# 1. Bỏ qua các tệp môi trường (Environment Variables)
+# Luôn giữ các tệp này ở local, không bao giờ đẩy lên Git.
+.env
+.env.*
+!.env.example
+
+# 2. Bỏ qua các tệp của Python
+# -----------------------------
+# Thư mục môi trường ảo
+.venv/
+venv/
+env/
+ENV/
+
+# Cache của Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Tệp cài đặt và build
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+.pytest_cache/
+.tox/
+.coverage
+
+# 3. Bỏ qua các tệp của Node.js (Cho thư mục /dashboard)
+# -----------------------------
+# Thư mục chứa các thư viện đã cài đặt
+node_modules/
+
+# Tệp log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 4. Bỏ qua các tệp của HĐH và IDE
+# -----------------------------
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# 5. Bỏ qua các tệp Log và Dữ liệu
+# -----------------------------
+*.log
+*.log.*
+*.csv
+*.data
+
+# 6. GHI CHÚ QUAN TRỌNG VỀ THƯ MỤC /models
+# -----------------------------
+# Các tệp model (.pkl, .h5, v.v.) thường RẤT LỚN.
+# Đẩy các tệp nhị phân lớn lên Git là một thói quen XẤU.
+#
+# LỰA CHỌN 1: (Bạn đang dùng) Nếu tệp model nhỏ (< 25MB),
+# bạn có thể giữ nó trong Git. Tệp .gitignore này sẽ KHÔNG
+# bỏ qua thư mục 'models/'.
+#
+# LỰA CHỌN 2: (Khuyên dùng) Nếu tệp model lớn, hãy bỏ qua chúng:
+# models/*.pkl
+# models/*.h5
+#
+# ...và sử dụng Git LFS (Large File Storage) hoặc tải chúng
+# từ một nơi lưu trữ (như MinIO mà bạn đang dùng) khi khởi động service.
