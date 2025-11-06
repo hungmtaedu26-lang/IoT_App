@@ -7,3 +7,4 @@ catboost
 joblib
 seaborn
 # Thêm các thư viện khác nếu bạn dùng trong notebook
+tensorflow

@@ -1,0 +1,8 @@
+               precision    recall  f1-score   support
+
+Không MDD (0)     0.9167    0.9167    0.9167        12
+      MDD (1)     0.8889    0.8889    0.8889         9
+
+     accuracy                         0.9048        21
+    macro avg     0.9028    0.9028    0.9028        21
+ weighted avg     0.9048    0.9048    0.9048        21
