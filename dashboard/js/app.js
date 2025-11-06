@@ -1,3 +1,4 @@
+
 // === PHẦN 1: CẤU HÌNH VÀ KHỞI TẠO BAN ĐẦU ===
 
 // 1. Cấu hình kết nối (QUAN TRỌNG: Sửa lại cho đúng với hệ thống của bạn)

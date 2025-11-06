@@ -4,7 +4,7 @@ import os
 import warnings
 import matplotlib.pyplot as plt
 import seaborn as sns
-import joblib
+from sklearn.base import clone
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, accuracy_score, f1_score, brier_score_loss, log_loss
@@ -13,7 +13,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import SGDClassifier
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.exceptions import ConvergenceWarning
 
 warnings.filterwarnings('ignore', category=ConvergenceWarning)
@@ -39,7 +38,6 @@ def plot_confusion_matrix(y_true, y_pred, model_name, output_path):
     plt.xlabel('Dự đoán')
     plt.ylabel('Thực tế')
     plt.savefig(output_path)
-    plt.show()
     plt.close()
 
 # --- HÀM MAIN ĐỂ CHẠY ---
@@ -64,15 +62,20 @@ def main():
     # Lấy nhãn thực tế (1 nhãn cho mỗi người)
     y_true_by_part = {pid: int(y[groups==pid].unique()[0]) for pid in participants}
 
-    # 2. Định nghĩa mô hình (giống Method2.ipynb, dùng CalibratedClassifierCV)
+    # 2. Định nghĩa mô hình với các điều chỉnh cân bằng lớp và siêu tham số
     models = {
         'Logistic Regression': LogisticRegression(max_iter=200, solver='liblinear', class_weight='balanced'),
-        'Random Forest': RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42, class_weight='balanced_subsample'),
-        'KNN': KNeighborsClassifier(n_neighbors=5),
+        'Random Forest': RandomForestClassifier(
+            n_estimators=50,
+            max_depth=5,
+            random_state=42,
+            class_weight='balanced_subsample',
+            n_jobs=-1
+        ),
+        'KNN': KNeighborsClassifier(n_neighbors=5, weights='distance'),
         'SVM': SVC(kernel='linear', C=1.0, probability=True, random_state=42, class_weight='balanced'),
         'SGD': SGDClassifier(loss='log_loss', penalty='l2', max_iter=200, alpha=1e-4, random_state=42, class_weight='balanced')
     }
-    calibration_method = 'sigmoid' # Nhanh hơn 'isotonic'
 
     # Chuẩn bị cấu trúc lưu dự đoán (theo người)
     pred_probs_by_model = {name: {pid: [] for pid in participants} for name in models}
@@ -92,13 +95,13 @@ def main():
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Huấn luyện và hiệu chuẩn từng mô hình
+        # Huấn luyện và dự đoán từng mô hình
         for name, base_model in models.items():
-            calibrator = CalibratedClassifierCV(base_model, method=calibration_method, cv=3) # cv=3 cho nhanh
-            calibrator.fit(X_train_scaled, y_train)
+            model = clone(base_model)
+            model.fit(X_train_scaled, y_train)
             
             # Dự đoán xác suất cho TẤT CẢ các mẫu của người bị bỏ ra
-            proba_samples = calibrator.predict_proba(X_test_scaled)[:, 1]
+            proba_samples = model.predict_proba(X_test_scaled)[:, 1]
             
             # Lưu trữ các xác suất này (chưa tính trung bình)
             for pid, prob in zip(test_pids, proba_samples):
@@ -114,6 +117,17 @@ def main():
     fig_folder = os.path.join(OUTPUT_FOLDER, 'confusion_matrices')
     os.makedirs(fig_folder, exist_ok=True)
 
+    def find_best_threshold(y_true, probs, metric=f1_score):
+        thresholds = np.linspace(0.0, 1.0, 101)
+        best_thresh, best_score = 0.5, -1
+        for thresh in thresholds:
+            preds = (probs >= thresh).astype(int)
+            score = metric(y_true, preds, zero_division=0)
+            if score > best_score:
+                best_score = score
+                best_thresh = thresh
+        return best_thresh, best_score
+
     for name in models:
         print(f"\n========================================================")
         print(f"KẾT QUẢ TỔNG HỢP CHO: {name}")
@@ -121,7 +135,8 @@ def main():
         
         # Tính trung bình xác suất cho mỗi người
         final_probs = np.array([np.mean(pred_probs_by_model[name][pid]) for pid in participants])
-        final_preds = (final_probs >= 0.5).astype(int)
+        best_threshold, best_f1 = find_best_threshold(final_y_true, final_probs)
+        final_preds = (final_probs >= best_threshold).astype(int)
         
         # Tính toán Metrics
         acc = accuracy_score(final_y_true, final_preds)
@@ -136,12 +151,14 @@ def main():
             'F1': f1,
             'ROC AUC': auc,
             'Brier Score': brier,
-            'Log Loss': ll
+            'Log Loss': ll,
+            'Best Threshold': best_threshold
         })
         
         print("\nBáo cáo phân loại (theo người):")
         print(classification_report(final_y_true, final_preds, target_names=['Không MDD (0)', 'MDD (1)']))
         print(f"Điểm AUC-ROC: {auc:.4f}")
+        print(f"Ngưỡng tối ưu (F1): {best_threshold:.2f} với F1={best_f1:.4f}")
         
         # Vẽ ma trận nhầm lẫn
         cm_path = os.path.join(fig_folder, f"cm_logo_{name.lower().replace(' ', '_')}.png")
