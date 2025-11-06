@@ -1,0 +1,9 @@
+pandas
+numpy
+scikit-learn
+xgboost
+lightgbm
+catboost
+joblib
+seaborn
+# Thêm các thư viện khác nếu bạn dùng trong notebook

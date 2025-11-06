@@ -1,0 +1,55 @@
+===== Logistic Regression =====
+              precision    recall  f1-score   support
+
+           0     0.8571    1.0000    0.9231        12
+           1     1.0000    0.7778    0.8750         9
+
+    accuracy                         0.9048        21
+   macro avg     0.9286    0.8889    0.8990        21
+weighted avg     0.9184    0.9048    0.9025        21
+
+
+===== Random Forest =====
+              precision    recall  f1-score   support
+
+           0     0.9167    0.9167    0.9167        12
+           1     0.8889    0.8889    0.8889         9
+
+    accuracy                         0.9048        21
+   macro avg     0.9028    0.9028    0.9028        21
+weighted avg     0.9048    0.9048    0.9048        21
+
+
+===== KNN =====
+              precision    recall  f1-score   support
+
+           0     0.8571    1.0000    0.9231        12
+           1     1.0000    0.7778    0.8750         9
+
+    accuracy                         0.9048        21
+   macro avg     0.9286    0.8889    0.8990        21
+weighted avg     0.9184    0.9048    0.9025        21
+
+
+===== SVM =====
+              precision    recall  f1-score   support
+
+           0     0.8462    0.9167    0.8800        12
+           1     0.8750    0.7778    0.8235         9
+
+    accuracy                         0.8571        21
+   macro avg     0.8606    0.8472    0.8518        21
+weighted avg     0.8585    0.8571    0.8558        21
+
+
+===== SGD =====
+              precision    recall  f1-score   support
+
+           0     0.8462    0.9167    0.8800        12
+           1     0.8750    0.7778    0.8235         9
+
+    accuracy                         0.8571        21
+   macro avg     0.8606    0.8472    0.8518        21
+weighted avg     0.8585    0.8571    0.8558        21
+
+

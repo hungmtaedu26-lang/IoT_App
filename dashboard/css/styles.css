@@ -1,0 +1,531 @@
+:root {
+    color-scheme: dark;
+    --bg-color: #0d121f;
+    --panel-color: #161b2b;
+    --panel-alt: #1d2435;
+    --accent-green: #3dd598;
+    --accent-yellow: #f5c453;
+    --accent-red: #ff5f74;
+    --text-primary: #f5f7fb;
+    --text-secondary: #a8b1c5;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --card-radius: 20px;
+    --shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background: radial-gradient(circle at top left, rgba(87, 99, 138, 0.25), transparent 55%),
+                radial-gradient(circle at bottom right, rgba(255, 95, 116, 0.12), transparent 60%),
+                var(--bg-color);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 48px;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+}
+
+.dashboard {
+    width: min(1300px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.top-bar {
+    background: rgba(17, 22, 34, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: var(--card-radius);
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow);
+}
+
+.branding {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #3546ff, #9a6bff);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.brand-text h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+.brand-text p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.status-group {
+    display: flex;
+    gap: 12px;
+}
+
+.status-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.status-chip span {
+    color: var(--text-secondary);
+}
+
+.status-chip.live {
+    color: var(--accent-green);
+}
+
+.status-chip.user {
+    color: var(--text-primary);
+}
+
+.content {
+    display: grid;
+    grid-template-columns: 2fr 1.7fr 1.2fr;
+    gap: 24px;
+}
+
+.center-card,
+.sensor-panel,
+.risk-log {
+    background: var(--panel-color);
+    border-radius: var(--card-radius);
+    border: 1px solid var(--border-color);
+    padding: 24px 28px;
+    box-shadow: var(--shadow);
+}
+
+.center-card header h2,
+.sensor-panel header h2,
+.risk-log header h2,
+.history-panel header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.ai-body {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    margin-top: 18px;
+}
+
+.gauge-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+}
+
+.gauge {
+    --value: 50;
+    --rotation: calc(-90deg + (var(--value) / 100 * 180deg));
+    position: relative;
+    width: 280px;
+    height: 140px;
+}
+
+.gauge-arc {
+    width: 100%;
+    height: 100%;
+    border-radius: 140px 140px 0 0;
+    background: conic-gradient(from 180deg,
+        var(--accent-green) 0deg 72deg,
+        var(--accent-yellow) 72deg 126deg,
+        var(--accent-red) 126deg 180deg);
+    position: relative;
+    overflow: hidden;
+}
+
+.gauge-mask {
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 75%;
+    height: 75%;
+    background: var(--panel-color);
+    border-top-left-radius: 999px;
+    border-top-right-radius: 999px;
+    border: 1px solid var(--border-color);
+}
+
+.gauge-needle {
+    position: absolute;
+    width: 2px;
+    height: 70%;
+    background: #ffffff;
+    top: 30%;
+    left: 50%;
+    transform-origin: bottom center;
+    transform: rotate(var(--rotation));
+    transition: transform 0.3s ease-in-out;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+.gauge-needle::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffffff;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.gauge-value {
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2.4rem;
+    font-weight: 600;
+}
+
+.gauge-scale {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    position: absolute;
+    bottom: -60px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.risk-text {
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.risk-text.high {
+    color: var(--accent-red);
+}
+
+.vitals h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+}
+
+.vital-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.vital-card {
+    background: var(--panel-alt);
+    border-radius: 16px;
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 120px;
+}
+
+.vital-card h4 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+}
+
+.vital-card .value {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.vital-card .value span {
+    font-size: 0.8rem;
+    margin-left: 4px;
+    color: var(--text-secondary);
+}
+
+.sensor-panel .charts {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 16px;
+}
+
+.chart {
+    background: var(--panel-alt);
+    border-radius: 18px;
+    padding: 18px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chart.large {
+    min-height: 260px;
+}
+
+.chart.mini {
+    min-height: 180px;
+}
+
+.chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.chart-body {
+    flex: 1;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(10, 14, 24, 0.6);
+    position: relative;
+    overflow: hidden;
+}
+
+.chart-body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.9;
+}
+
+.chart-body.pulse::before {
+    background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0px, rgba(255, 255, 255, 0.02) 6px, transparent 6px, transparent 12px),
+                repeating-linear-gradient(-45deg, rgba(63, 226, 255, 0.35) 0px, rgba(63, 226, 255, 0.35) 4px, transparent 4px, transparent 16px);
+}
+
+.chart-body.temp::before {
+    background: repeating-linear-gradient(-30deg, rgba(255, 154, 85, 0.35) 0 8px, transparent 8px 16px);
+}
+
+.chart-body.accel::before {
+    background: repeating-linear-gradient(-60deg, rgba(121, 196, 255, 0.45) 0 4px, transparent 4px 12px);
+}
+
+.mini-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.risk-log ul {
+    list-style: none;
+    margin-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.log-entry {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 16px;
+    padding: 14px 16px;
+    border-left: 4px solid transparent;
+}
+
+.log-entry .icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.log-entry .time {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.log-entry.danger {
+    border-left-color: var(--accent-red);
+}
+
+.log-entry.danger .icon {
+    color: var(--accent-red);
+}
+
+.log-entry.warning {
+    border-left-color: var(--accent-yellow);
+}
+
+.log-entry.warning .icon {
+    color: var(--accent-yellow);
+}
+
+.log-entry.safe {
+    border-left-color: var(--accent-green);
+}
+
+.log-entry.safe .icon {
+    color: var(--accent-green);
+}
+
+.tab-bar {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.tab {
+    background: var(--panel-color);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 14px 28px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab.active {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+}
+
+.history-panel {
+    background: linear-gradient(145deg, rgba(17, 22, 36, 0.88), rgba(16, 21, 34, 0.94));
+    border-radius: var(--card-radius);
+    padding: 28px 30px 36px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+.history-panel header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 24px;
+}
+
+.history-panel .filters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.filter-chips {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.chip {
+    border-radius: 999px;
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+}
+
+.chip.active {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+.history-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.history-large {
+    min-height: 220px;
+}
+
+.chart-body.history-risk::before {
+    background: linear-gradient(180deg, rgba(255, 95, 116, 0.35), transparent),
+                repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 12px, transparent 12px 24px),
+                repeating-linear-gradient(-45deg, rgba(61, 213, 152, 0.2) 0 6px, transparent 6px 24px);
+}
+
+.chart-body.history-correlation::before {
+    background: radial-gradient(circle at 70% 30%, rgba(61, 213, 152, 0.25), transparent 55%),
+                radial-gradient(circle at 20% 70%, rgba(255, 197, 83, 0.25), transparent 45%),
+                repeating-linear-gradient(45deg, rgba(154, 107, 255, 0.4) 0 3px, transparent 3px 12px);
+}
+
+@media (max-width: 1200px) {
+    body {
+        padding: 24px;
+    }
+
+    .content {
+        grid-template-columns: 1fr;
+    }
+
+    .risk-log {
+        order: 3;
+    }
+
+    .sensor-panel {
+        order: 2;
+    }
+}
+
+@media (max-width: 768px) {
+    .top-bar {
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .status-group {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .vital-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .history-charts {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Hỗ trợ Giám sát MDD</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="top-bar">
+            <div class="branding">
+                <div class="logo">MDD</div>
+                <div class="brand-text">
+                    <h1>Hệ thống Hỗ trợ Giám sát MDD</h1>
+                    <p>Clinical Wellness Dashboard</p>
+                </div>
+            </div>
+            <div class="status-group">
+                <div class="status-chip live">● LIVE <span>MQTT Connected</span></div>
+                <div class="status-chip user">USER: doctor_smith</div>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="ai-control center-card">
+                <header>
+                    <h2>Trung tâm điều khiển AI (Real-time)</h2>
+                </header>
+                <div class="ai-body">
+                    <div class="gauge-wrapper">
+                        <div class="gauge" style="--value: 78">
+                            <div class="gauge-arc"></div>
+                            <div class="gauge-mask"></div>
+                            <div class="gauge-needle"></div>
+                            <div class="gauge-value">78%</div>
+                            <div class="gauge-scale">
+                                <span>0%</span>
+                                <span>40%</span>
+                                <span>70%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                        <div class="risk-text high">KẾT LUẬN: NGUY CƠ CAO (MDD)</div>
+                    </div>
+
+                    <div class="vitals">
+                        <h3>Vitals Dashboard</h3>
+                        <div class="vital-grid">
+                            <article class="vital-card">
+                                <h4>PULSE</h4>
+                                <p class="value">85 <span>BPM</span></p>
+                            </article>
+                            <article class="vital-card">
+                                <h4>SpO₂</h4>
+                                <p class="value">97 <span>%</span></p>
+                            </article>
+                            <article class="vital-card">
+                                <h4>TEMP</h4>
+                                <p class="value">36.8 <span>°C</span></p>
+                            </article>
+                            <article class="vital-card">
+                                <h4>ACTIVITY</h4>
+                                <p class="value">VẬN ĐỘNG THẤP</p>
+                            </article>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="sensor-panel">
+                <header>
+                    <h2>Đồ thị sóng cảm biến (Real-time từ MQTT)</h2>
+                </header>
+                <div class="charts">
+                    <article class="chart large">
+                        <div class="chart-header">
+                            <h3>Đồ thị Pulse Rate (BPM)</h3>
+                            <span>Real-time stream</span>
+                        </div>
+                        <div class="chart-body pulse"></div>
+                    </article>
+                    <div class="mini-charts">
+                        <article class="chart mini">
+                            <div class="chart-header">
+                                <h3>Đồ thị Temp (°C)</h3>
+                            </div>
+                            <div class="chart-body temp"></div>
+                        </article>
+                        <article class="chart mini">
+                            <div class="chart-header">
+                                <h3>Đồ thị Accel (X)</h3>
+                            </div>
+                            <div class="chart-body accel"></div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="risk-log">
+                <header>
+                    <h2>Nhật ký sự kiện &amp; rủi ro</h2>
+                </header>
+                <ul>
+                    <li class="log-entry danger">
+                        <span class="icon">!</span>
+                        <div>
+                            <p class="time">10:10:05 AM · RED</p>
+                            <p>Nguy cơ MDD tăng &gt; 70% (Score: 78.5%)</p>
+                        </div>
+                    </li>
+                    <li class="log-entry warning">
+                        <span class="icon">i</span>
+                        <div>
+                            <p class="time">10:05:15 AM · YELLOW</p>
+                            <p>Nguy cơ MDD giảm &lt; 70% (Score: 65.0%)</p>
+                        </div>
+                    </li>
+                    <li class="log-entry safe">
+                        <span class="icon">✓</span>
+                        <div>
+                            <p class="time">09:50:00 AM · GREEN</p>
+                            <p>Nguy cơ MDD ổn định &lt; 40% (Score: 30.2%)</p>
+                        </div>
+                    </li>
+                </ul>
+            </aside>
+        </main>
+
+        <footer class="tab-bar">
+            <button class="tab active">● Bảng điều khiển Real-time</button>
+            <button class="tab">○ Phân tích Lịch sử</button>
+        </footer>
+
+        <section class="history-panel">
+            <header>
+                <h2>Phân tích lịch sử</h2>
+                <div class="filters">
+                    <label>Khoảng thời gian</label>
+                    <div class="filter-chips">
+                        <span class="chip active">Hôm nay</span>
+                        <span class="chip">7 ngày qua</span>
+                        <span class="chip">Tùy chọn...</span>
+                    </div>
+                </div>
+            </header>
+            <div class="history-charts">
+                <article class="chart history-large">
+                    <div class="chart-header">
+                        <h3>Xu hướng rủi ro (Xác suất AI)</h3>
+                    </div>
+                    <div class="chart-body history-risk"></div>
+                </article>
+                <article class="chart history-large">
+                    <div class="chart-header">
+                        <h3>Tương quan: Xác suất AI vs Pulse Rate</h3>
+                    </div>
+                    <div class="chart-body history-correlation"></div>
+                </article>
+            </div>
+        </section>
+    </div>
+    <!-- Thêm các thư viện -->
+    <script src="js/paho-mqtt.js"></script>
+    <script src="js/chart.umd.min.js"></script>
+
+    <!-- Thêm file logic chính của chúng ta -->
+    <script src="js/app.js"></script>
+</body>
+</html>
