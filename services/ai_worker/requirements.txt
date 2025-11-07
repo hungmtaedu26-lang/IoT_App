@@ -1,0 +1,6 @@
+kafka-python-ng
+paho-mqtt
+tensorflow
+scikit-learn
+pandas
+numpy
