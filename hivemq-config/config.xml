@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hivemq xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="hivemq-config.xsd">
+    <listeners>
+        <tcp-listener>
+            <name>mqtt-listener</name>
+            <port>1883</port>
+            <bind-address>0.0.0.0</bind-address>
+        </tcp-listener>
+
+        <!-- <tls-tcp-listener>
+            <name>mqtt-tls-listener</name>
+            <port>8883</port>
+            <bind-address>0.0.0.0</bind-address>
+        </tls-tcp-listener> -->
+
+        <websocket-listener>
+            <name>dashboard-websocket</name>
+            <port>9002</port>
+            <bind-address>0.0.0.0</bind-address>
+            <path>/mqtt</path>
+            <subprotocols>
+                <subprotocol>mqtt</subprotocol>
+            </subprotocols>
+        </websocket-listener>
+    </listeners>
+</hivemq>

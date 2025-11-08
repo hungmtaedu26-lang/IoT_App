@@ -26,16 +26,26 @@ def connect_db_with_retry():
             print(f"Khong the ket noi toi MariaDB, thu lai sau 5 giay... Loi: {e}")
             time.sleep(5)
 
+def create_kafka_consumer():
+    while True:
+        try:
+            consumer = KafkaConsumer(
+                KAFKA_TOPIC,
+                bootstrap_servers=KAFKA_BROKER,
+                auto_offset_reset='earliest',
+                value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+                group_id='db-writer-group'
+            )
+            print("Da ket noi toi Kafka, san sang nhan tin nhan!")
+            return consumer
+        except Exception as e:
+            print(f"Khong the ket noi toi Kafka, thu lai sau 5 giay... Loi: {e}")
+            time.sleep(5)
+
 def main():
     print("--- Khoi dong Database Worker ---")
     
-    consumer = KafkaConsumer(
-        KAFKA_TOPIC,
-        bootstrap_servers=KAFKA_BROKER,
-        auto_offset_reset='earliest', # Bắt đầu đọc từ tin nhắn cũ nhất
-        value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-        group_id='db-writer-group' # Định danh nhóm consumer
-    )
+    consumer = create_kafka_consumer()
 
     db_conn = connect_db_with_retry()
 

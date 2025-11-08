@@ -1,6 +1,8 @@
 # Chọn base image Python
 FROM python:3.9-slim
 
+ENV PYTHONUNBUFFERED=1
+
 # Đặt thư mục làm việc trong container
 WORKDIR /app
 

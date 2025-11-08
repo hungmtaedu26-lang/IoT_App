@@ -1,5 +1,7 @@
 :root {
     color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     --bg-color: #0d121f;
     --panel-color: #161b2b;
     --panel-alt: #1d2435;
@@ -47,6 +49,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
     box-shadow: var(--shadow);
 }
@@ -107,6 +110,165 @@ body {
 
 .status-chip.user {
     color: var(--text-primary);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    border-radius: 16px;
+}
+
+.status-chip.user p {
+    font-weight: 600;
+}
+
+.status-chip.user small {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.current-device {
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
+
+.current-device span {
+    color: var(--accent-green);
+    font-weight: 600;
+}
+
+.device-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.device-picker select {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 6px 10px;
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.device-picker button {
+    background: var(--accent-green);
+    border: none;
+    border-radius: 10px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.device-picker button#configBtn {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+.sr-only {
+    border: 0;
+    clip: rect(0 0 0 0);
+    height: 1px;
+    width: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+}
+
+.config-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    z-index: 40;
+}
+
+.config-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(420px, 90vw);
+    background: #151b2d;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 24px;
+    z-index: 50;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.config-panel header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.config-panel header button {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+.config-panel .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.config-panel .form-row.checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.config-panel label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.config-panel input[type="text"],
+.config-panel input[type="number"] {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.config-panel .form-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.config-panel .form-actions button {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.config-panel .form-actions button.primary {
+    background: var(--accent-green);
+    color: #0d121f;
+}
+
+.config-panel .form-actions button:not(.primary) {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+.hidden {
+    display: none !important;
 }
 
 .content {
@@ -233,6 +395,14 @@ body {
 
 .risk-text.high {
     color: var(--accent-red);
+}
+
+.risk-text.medium {
+    color: var(--accent-yellow);
+}
+
+.risk-text.low {
+    color: var(--accent-green);
 }
 
 .vitals h3 {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ thống Hỗ trợ Giám sát MDD</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="./css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -21,7 +21,21 @@
             </div>
             <div class="status-group">
                 <div class="status-chip live">● LIVE <span>MQTT Connected</span></div>
-                <div class="status-chip user">USER: doctor_smith</div>
+                <div class="status-chip user">
+                    <div>
+                        <p>USER: doctor_smith</p>
+                        <small>Chọn thiết bị cần giám sát</small>
+                        <div class="current-device">Thiết bị đang xem: <span id="currentDeviceLabel">--</span></div>
+                    </div>
+                    <div class="device-picker">
+                        <label for="deviceSelect" class="sr-only">Chọn thiết bị</label>
+                        <select id="deviceSelect">
+                            <option value="">Đang tải...</option>
+                        </select>
+                        <button id="refreshDevicesBtn" title="Làm mới danh sách thiết bị">⟳</button>
+                        <button id="configBtn" title="Cấu hình kết nối">⚙️</button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -163,11 +177,54 @@
             </div>
         </section>
     </div>
+    <div class="config-overlay hidden" id="configOverlay"></div>
+    <section class="config-panel hidden" id="configPanel">
+        <header>
+            <h3>Cấu hình kết nối</h3>
+            <button id="configCloseBtn" aria-label="Đóng cấu hình">✕</button>
+        </header>
+        <form id="configForm">
+            <div class="form-row">
+                <label for="configMqttHost">MQTT Host</label>
+                <input type="text" id="configMqttHost" name="mqttHost" placeholder="vd: 127.0.0.1">
+            </div>
+            <div class="form-row">
+                <label for="configMqttPort">MQTT Port</label>
+                <input type="number" id="configMqttPort" name="mqttPort" min="1" max="65535">
+            </div>
+            <div class="form-row checkbox">
+                <label>
+                    <input type="checkbox" id="configUseTls" name="useTls">
+                    Bật TLS (wss://)
+                </label>
+            </div>
+            <div class="form-row">
+                <label for="configMqttPath">MQTT Path</label>
+                <input type="text" id="configMqttPath" name="mqttPath" placeholder="/mqtt">
+            </div>
+            <div class="form-row">
+                <label for="configApiHost">API Host</label>
+                <input type="text" id="configApiHost" name="apiHost" placeholder="vd: localhost">
+            </div>
+            <div class="form-row">
+                <label for="configApiPort">API Port</label>
+                <input type="number" id="configApiPort" name="apiPort" min="1" max="65535">
+            </div>
+            <div class="form-row">
+                <label for="configDefaultMac">MAC mặc định</label>
+                <input type="text" id="configDefaultMac" name="defaultMac" placeholder="AA:BB:CC:DD:EE:FF">
+            </div>
+            <div class="form-actions">
+                <button type="button" id="configResetBtn">Khôi phục mặc định</button>
+                <button type="submit" class="primary">Lưu và tải lại</button>
+            </div>
+        </form>
+    </section>
     <!-- Thêm các thư viện -->
-    <script src="js/mqtt.js"></script>
-    <script src="js/chart.js"></script>
+    <script src="./js/mqtt.js"></script>
+    <script src="./js/chart.js"></script>
 
     <!-- Thêm file logic chính của chúng ta -->
-    <script src="js/app.js"></script>
+    <script src="./js/app.js"></script>
 </body>
 </html>

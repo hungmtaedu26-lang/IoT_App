@@ -5,6 +5,7 @@ from typing import List, Optional
 
 import mysql.connector
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from mysql.connector import Error
 from pydantic import BaseModel, Field
 
@@ -19,6 +20,14 @@ app = FastAPI(
     title="IoT Real-time Dashboard API",
     description="API cung cấp dữ liệu cảm biến lịch sử từ hệ thống.",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 def get_db_connection():

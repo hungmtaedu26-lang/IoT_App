@@ -1,6 +1,8 @@
 # Sử dụng một base image Python gọn nhẹ và ổn định
 FROM python:3.9-slim
 
+ENV PYTHONUNBUFFERED=1
+
 # Thiết lập thư mục làm việc bên trong container
 WORKDIR /app
 

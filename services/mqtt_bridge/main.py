@@ -87,7 +87,8 @@ def main():
             
             # Gửi tin nhắn
             result = mqtt_client.publish(mqtt_topic, mqtt_payload)
-            result.wait_for_publish(timeout=5) # Chờ để đảm bảo tin nhắn đã được gửi
+            # Đảm bảo tin nhắn đã được gửi đi trước khi xử lý tiếp
+            result.wait_for_publish()
 
             if result.is_published():
                  print(f"Chuyen tiep: Kafka '{kafka_topic}' -> MQTT '{mqtt_topic}'")

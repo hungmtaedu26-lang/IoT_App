@@ -1,10 +1,12 @@
 import json
 import time
 import pickle
+from datetime import datetime
+from collections import deque
+
 import numpy as np
 import tensorflow as tf
 from kafka import KafkaConsumer, KafkaProducer
-from collections import deque
 
 # --- CẤU HÌNH ---
 KAFKA_BROKER = 'kafka:29092'
@@ -18,6 +20,14 @@ SCALER_PATH = '/models/scaler.pkl'
 WINDOW_SIZE = None
 NUM_FEATURES = None
 SENSOR_COLS_ORDER = None # Lưu lại đúng thứ tự các cột
+
+# Ánh xạ tên cột trong artifact sang payload thực tế từ thiết bị
+SENSOR_KEY_ALIAS = {
+    'accel_x': 'ax_g',
+    'temperature': 'temp',
+    'pulse_rate': 'bpm',
+    'spo2': 'spo2',
+}
 
 # Bộ đệm dữ liệu cho mỗi thiết bị
 data_buffers = {}
@@ -98,7 +108,10 @@ def main():
             data_buffers[mac] = deque(maxlen=WINDOW_SIZE)
         
         # Trích xuất các feature theo đúng thứ tự mà model đã được huấn luyện
-        features = [data.get(col, 0) for col in SENSOR_COLS_ORDER]
+        features = []
+        for col in SENSOR_COLS_ORDER:
+            payload_key = SENSOR_KEY_ALIAS.get(col, col)
+            features.append(data.get(payload_key, 0))
         data_buffers[mac].append(features)
 
         # 2. Chỉ dự đoán khi bộ đệm đã có đủ 64 điểm dữ liệu
