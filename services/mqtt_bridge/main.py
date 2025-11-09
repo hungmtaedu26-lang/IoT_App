@@ -1,35 +1,44 @@
 import json
 import os
 import time
+from typing import Iterable, List, Optional
+
 from kafka import KafkaConsumer
 import paho.mqtt.client as mqtt
 
 # --- CẤU HÌNH ---
-# Đọc thông tin kết nối từ biến môi trường của Docker Compose
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:29092")
-KAFKA_TOPICS = os.getenv("KAFKA_TOPICS", "raw_sensor_data,ai_predictions").split(',')
-MQTT_BROKER = os.getenv("MQTT_BROKER", "hivemq")
+def parse_csv(value: str) -> List[str]:
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
+KAFKA_BROKERS = parse_csv(os.getenv("KAFKA_BROKERS", "kafka:29092,localhost:9092"))
+KAFKA_TOPICS = parse_csv(os.getenv("KAFKA_TOPICS", "raw_sensor_data,ai_predictions"))
+MQTT_BROKERS = parse_csv(os.getenv("MQTT_BROKERS", "hivemq,localhost"))
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 
-def create_kafka_consumer(topics):
-    """Tạo Kafka consumer, có cơ chế retry."""
+def create_kafka_consumer(topics: Iterable[str]):
+    """Tạo Kafka consumer, có cơ chế retry, thử nhiều broker."""
+    if not KAFKA_BROKERS:
+        raise RuntimeError("Khong co Kafka broker nao duoc cung cap (KAFKA_BROKERS).")
+
     while True:
         try:
             consumer = KafkaConsumer(
-                *topics, # Dấu * để unpack list các topic
-                bootstrap_servers=KAFKA_BROKER,
+                *topics,
+                bootstrap_servers=KAFKA_BROKERS,
                 auto_offset_reset='earliest',
                 value_deserializer=lambda x: json.loads(x.decode('utf-8')),
                 group_id='mqtt-bridge-group'
             )
-            print(f"Da ket noi toi Kafka va lang nghe cac topic: {topics}")
+            print(f"Da ket noi toi Kafka ({KAFKA_BROKERS}) va lang nghe cac topic: {topics}")
             return consumer
         except Exception as e:
-            print(f"Khong the ket noi toi Kafka, thu lai sau 5 giay... Loi: {e}")
+            print(f"Khong the ket noi toi Kafka ({KAFKA_BROKERS}), thu lai sau 5 giay... Loi: {e}")
             time.sleep(5)
 
 def create_mqtt_client():
-    """Tạo MQTT client, có cơ chế retry."""
+    """Tạo MQTT client, có cơ chế retry và thử nhiều hostname."""
+
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
             print("Da ket noi thanh cong toi MQTT Broker!")
@@ -38,15 +47,17 @@ def create_mqtt_client():
 
     client = mqtt.Client(client_id="mqtt-bridge-service")
     client.on_connect = on_connect
-    
+
     while True:
-        try:
-            client.connect(MQTT_BROKER, MQTT_PORT, 60)
-            client.loop_start() # Bắt đầu luồng riêng để xử lý MQTT
-            return client
-        except Exception as e:
-            print(f"Khong the ket noi toi MQTT Broker, thu lai sau 5 giay... Loi: {e}")
-            time.sleep(5)
+        for host in MQTT_BROKERS:
+            try:
+                print(f"Thu ket noi MQTT broker '{host}:{MQTT_PORT}'...")
+                client.connect(host, MQTT_PORT, 60)
+                client.loop_start()
+                return client
+            except Exception as e:
+                print(f"Khong the ket noi toi MQTT Broker '{host}:{MQTT_PORT}', thu host tiep... Loi: {e}")
+        time.sleep(5)
 
 def get_mac_from_payload(payload):
     """Trích xuất địa chỉ MAC từ các loại payload khác nhau."""

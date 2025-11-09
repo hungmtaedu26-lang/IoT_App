@@ -54,6 +54,7 @@ const MQTT_BROKER_PATH = runtimeConfig.mqttPath || '/mqtt';
 const USE_MQTT_TLS = runtimeConfig.useTls;
 const API_BASE_URL = `${runtimeConfig.apiProtocol || 'http'}://${runtimeConfig.apiHost}:${runtimeConfig.apiPort}`;
 const DEFAULT_MAC_ADDRESS = runtimeConfig.defaultMac;
+const HISTORY_FETCH_LIMIT = 200;
 
 // 2. Lấy các element từ HTML để cập nhật sau này
 const domElements = {
@@ -439,6 +440,10 @@ function resetRealtimeState() {
         charts.historyRisk.data.datasets[0].data = [];
         charts.historyRisk.update();
     }
+    if (charts.historyCorr) {
+        charts.historyCorr.data.datasets[0].data = [];
+        charts.historyCorr.update();
+    }
 }
 
 function subscribeToSelectedTopics() {
@@ -462,36 +467,60 @@ function subscribeToSelectedTopics() {
     currentSubscriptions = { raw: rawTopic, ai: aiTopic };
 }
 
-function updatePredictionUI(data) {
-    // Gốc dữ liệu từ AI worker: probability (0 -> an toàn, 1 -> nguy cơ cao)
-    let probability = 0;
-    if (typeof data.probability === 'number') {
-        probability = data.probability;
-    } else if (typeof data.prediction === 'number') {
-        probability = data.prediction;
-    } else if (data.prediction === 'Bất thường') {
-        probability = 0.8;
-    } else {
-        probability = 0.2;
+function normalizeProbability(raw) {
+    if (raw === null || raw === undefined) return null;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return null;
+    if (value > 1.5) {
+        return Math.min(Math.max(value / 100, 0), 1);
     }
-    const score = Math.min(Math.max(probability * 100, 0), 100);
+    if (value < 0) return 0;
+    return Math.min(value, 1);
+}
 
-    // Cập nhật đồng hồ gauge
+function updatePredictionUI(data) {
+    const probabilityCandidates = [
+        data.probability,
+        data.risk_score,
+        data.score,
+        data.probability_percent
+    ];
+
+    let probability = null;
+    for (const value of probabilityCandidates) {
+        const normalized = normalizeProbability(value);
+        if (normalized !== null) {
+            probability = normalized;
+            break;
+        }
+    }
+
+    if (probability === null) {
+        if (typeof data.prediction === 'number') {
+            probability = data.prediction ? 0.9 : 0.1;
+        } else if (data.prediction === 'Bất thường') {
+            probability = 0.8;
+        } else {
+            probability = 0.2;
+        }
+    }
+
+    const score = Math.min(Math.max(Math.round(probability * 100), 0), 100);
+
     domElements.gauge.style.setProperty('--value', score);
-    domElements.gaugeValue.textContent = `${Math.round(score)}%`;
+    domElements.gaugeValue.textContent = `${score}%`;
 
-    // Cập nhật văn bản kết luận
     if (score > 70) {
         domElements.riskText.textContent = 'KẾT LUẬN: NGUY CƠ CAO (MDD)';
         domElements.riskText.className = 'risk-text high';
         addLogEntry(score, 'danger');
     } else if (score > 40) {
         domElements.riskText.textContent = 'KẾT LUẬN: NGUY CƠ TRUNG BÌNH';
-        domElements.riskText.className = 'risk-text medium'; // Cần thêm CSS cho class này
+        domElements.riskText.className = 'risk-text medium';
         addLogEntry(score, 'warning');
     } else {
         domElements.riskText.textContent = 'KẾT LUẬN: NGUY CƠ THẤP';
-        domElements.riskText.className = 'risk-text low'; // Cần thêm CSS cho class này
+        domElements.riskText.className = 'risk-text low';
     }
 }
 
@@ -529,54 +558,132 @@ async function fetchHistoryData() {
     }
     console.log("Đang lấy dữ liệu lịch sử...");
     try {
-        const response = await fetch(`${API_BASE_URL}/readings/${selectedMac}?limit=100`);
-        if (!response.ok) throw new Error('Lỗi API');
-        const dataList = await response.json();
-        
-        console.log(`Đã nhận ${dataList.length} bản ghi lịch sử.`);
-        // Đảo ngược mảng để hiển thị theo thời gian tăng dần
-        dataList.reverse();
+        const [sensorRes, predictionRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/readings/${selectedMac}?limit=${HISTORY_FETCH_LIMIT}`),
+            fetch(`${API_BASE_URL}/predictions/${selectedMac}?limit=${HISTORY_FETCH_LIMIT}`)
+        ]);
 
-        // Vẽ biểu đồ lịch sử (ví dụ: biểu đồ BPM lịch sử)
-        drawHistoryChart(dataList);
+        const sensorData = sensorRes.ok ? await sensorRes.json() : [];
+        const predictionData = predictionRes.ok ? await predictionRes.json() : [];
 
+        console.log(`Đã nhận ${predictionData.length} bản ghi dự đoán, ${sensorData.length} bản ghi cảm biến.`);
+        drawHistoryCharts(predictionData, sensorData);
     } catch (error) {
         console.error("Không thể lấy dữ liệu lịch sử:", error);
+        drawHistoryCharts([], []);
     }
 }
 
-function drawHistoryChart(dataList) {
-    // Chuẩn bị dữ liệu
-    const labels = dataList.map(d => new Date(d.received_at).toLocaleTimeString());
-    const bpmData = dataList.map(d => d.bpm);
+function formatHistoryLabel(ts) {
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) {
+        return '--';
+    }
+    return date.toLocaleTimeString();
+}
 
-    // Khởi tạo biểu đồ lịch sử (nếu chưa có)
+function ensureHistoryCharts() {
     if (!charts.historyRisk) {
         charts.historyRisk = new Chart(document.getElementById('historyRiskChartCanvas'), {
-            type: 'bar', // Thử biểu đồ cột
+            type: 'line',
             data: {
-                labels: labels,
+                labels: [],
                 datasets: [{
-                    label: 'Nhịp tim (BPM) Lịch sử',
-                    data: bpmData,
-                    backgroundColor: 'rgba(61, 213, 152, 0.5)',
-                    borderColor: '#3dd598',
-                    borderWidth: 1
+                    label: 'Xác suất AI (%)',
+                    data: [],
+                    borderColor: '#f368e0',
+                    backgroundColor: 'rgba(243, 104, 224, 0.15)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 0
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: { y: { beginAtZero: false } },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    title: { display: false, text: '' }
+                }
+            }
+        });
+    }
+    if (!charts.historyCorr) {
+        charts.historyCorr = new Chart(document.getElementById('historyCorrChartCanvas'), {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'BPM vs AI Risk',
+                    data: [],
+                    backgroundColor: '#10ac84',
+                    borderColor: '#10ac84',
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Nhịp tim (BPM)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                    },
+                    y: {
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'Xác suất AI (%)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                    }
+                },
                 plugins: { legend: { display: false } }
             }
         });
-    } else {
-        // Nếu đã có thì cập nhật data
-        charts.historyRisk.data.labels = labels;
-        charts.historyRisk.data.datasets[0].data = bpmData;
-        charts.historyRisk.update();
     }
+}
+
+function drawHistoryCharts(predictions = [], sensorReadings = []) {
+    ensureHistoryCharts();
+
+    const sortedPredictions = [...predictions].sort(
+        (a, b) => new Date(a.analyzed_at) - new Date(b.analyzed_at)
+    );
+
+    const labels = [];
+    const riskValues = [];
+    const scatterPoints = [];
+
+    sortedPredictions.forEach((item) => {
+        const normalized = normalizeProbability(item.probability);
+        if (normalized === null) return;
+
+        const score = Math.round(normalized * 100);
+        labels.push(formatHistoryLabel(item.analyzed_at));
+        riskValues.push(score);
+
+        if (typeof item.bpm === 'number') {
+            scatterPoints.push({ x: item.bpm, y: score });
+        }
+    });
+
+    charts.historyRisk.data.labels = labels;
+    charts.historyRisk.data.datasets[0].data = riskValues;
+    charts.historyRisk.update();
+
+    charts.historyCorr.data.datasets[0].data = scatterPoints;
+    charts.historyCorr.update();
+
+    const hasRiskData = labels.length > 0;
+    charts.historyRisk.options.plugins.title.display = !hasRiskData;
+    charts.historyRisk.options.plugins.title.text = hasRiskData ? '' : 'Chưa có dữ liệu dự đoán AI';
 }
 
 // === PHẦN 6: KHỞI CHẠY ===
