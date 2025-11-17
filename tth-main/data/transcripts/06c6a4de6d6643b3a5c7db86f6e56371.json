@@ -1,0 +1,26 @@
+{
+  "status": "verified",
+  "proof": {
+    "type": "mock",
+    "backend": "mock-groth16",
+    "trace_id": "06c6a4de6d6643b3a5c7db86f6e56371",
+    "commitments": {
+      "sender_commitment_before": 104163697110434897389873508339335487974656909938923424200881523938107932847634,
+      "receiver_commitment_before": 11585427313952342830646682383960653252963711514490917816372615171202273480274,
+      "sender_commitment_after": 92197118872238816593887067549575202973715849791435223980641596273024308063164,
+      "receiver_commitment_after": 91618653854540042497316828065505093097929046606786980879091954474669755041538
+    }
+  },
+  "public": {
+    "amount": 10,
+    "sender_after": 90,
+    "receiver_after": 160
+  },
+  "witness": {
+    "sender_before": 100,
+    "receiver_before": 150
+  },
+  "on_chain": {
+    "error": "'SignedTransaction' object has no attribute 'rawTransaction'"
+  }
+}

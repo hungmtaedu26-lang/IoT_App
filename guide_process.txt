@@ -1,0 +1,636 @@
+HƯỚNG DẪN TRIỂN KHAI LƯU TRỮ FILECOIN CHO HỆ THỐNG IOT
+
+-------------------------------------------------------------------------------
+0. MỤC TIÊU & PHẠM VI
+-------------------------------------------------------------------------------
+
+- Chỉ sử dụng Filecoin (qua Lighthouse), KHÔNG dùng IPFS.
+- Transcript = file tổng hợp THEO NGÀY CHO TỪNG THIẾT BỊ (mỗi thiết bị + 1 ngày = 1 transcript).
+- Dữ liệu nguồn lấy từ MariaDB:
+  - Bảng sensor_readings (dữ liệu từ gateway).
+  - Bảng ai_predictions (kết quả AI).
+- Nội dung transcript chỉ là CÁC THỐNG KÊ (không lưu từng dòng raw/AI).
+- Múi giờ: UTC cho toàn bộ logic ngày/giờ.
+- Cách chạy:
+  - Transcript Builder: service chạy liên tục, định kỳ sinh/refresh transcript.
+  - Filecoin Uploader: service dùng watcher để theo dõi transcript mới và upload.
+- Tính chất triển khai:
+  - Idempotent (có thể ghi đè transcript cho cùng (mac, date) không cần trạng thái DB).
+  - Metadata Filecoin có thêm: hash_transcript (SHA-256), mac, date, trace_id.
+  - Dùng ./data làm thư mục dữ liệu chung cho mọi service (nhất quán với tth-main).
+
+Mục tiêu cuối cùng: mỗi ngày, cho mỗi thiết bị, hệ thống tự động:
+  MariaDB  →  Transcript (JSON)  →  Filecoin (Lighthouse / mock)  →  Metadata JSON
+  (sensor_readings, ai_predictions)      (data/transcripts/)          (data/filecoin/ + bảng DB)
+
+-------------------------------------------------------------------------------
+1. ĐỊNH NGHĨA TRANSCRIPT & NỘI DUNG THỐNG KÊ
+-------------------------------------------------------------------------------
+
+1.1. Quy ước trace_id và tên file
+
+- Với mỗi thiết bị (mac_address) và mỗi ngày (UTC) ta sinh một transcript.
+- Quy ước:
+  - date: chuỗi YYYY-MM-DD theo UTC (ví dụ "2025-01-01").
+  - trace_id: "<MAC>_<YYYY-MM-DD>" (ví dụ "AA:BB:CC:DD:EE:FF_2025-01-01").
+  - Tên file transcript: "<trace_id>.json", lưu tại:
+    data/transcripts/<trace_id>.json
+
+1.2. Thống kê CỤ THỂ sẽ lưu trong transcript
+
+Nội dung transcript chỉ là các thống kê tổng hợp từ hai bảng sensor_readings và ai_predictions. 
+Gợi ý cấu trúc (có thể điều chỉnh, nhưng nên giữ ý tưởng chính):
+
+- Thông tin chung:
+  - trace_id: chuỗi "<MAC>_<YYYY-MM-DD>".
+  - mac: địa chỉ MAC của thiết bị.
+  - date: ngày (UTC) đang thống kê, dạng "YYYY-MM-DD".
+  - time_range: khoảng thời gian thực tế có dữ liệu trong ngày (UTC):
+    - start: ISO 8601 UTC (ví dụ "2025-01-01T00:00:10Z").
+    - end:   ISO 8601 UTC (ví dụ "2025-01-01T23:59:40Z").
+
+- Nhóm thống kê cảm biến (sensor_stats) từ bảng sensor_readings:
+  - count: tổng số bản ghi sensor trong ngày đó.
+  - bpm_min / bpm_max / bpm_avg: nhịp tim tối thiểu/tối đa/trung bình.
+  - spo2_min / spo2_max / spo2_avg: SpO2 tối thiểu/tối đa/trung bình.
+  - temp_min / temp_max / temp_avg: nhiệt độ tối thiểu/tối đa/trung bình.
+  - ax_g_min / ax_g_max / ax_g_avg: gia tốc trung bình theo trục x.
+  - valid_bpm_count: số bản ghi có validBPM = TRUE.
+  - valid_spo2_count: số bản ghi có validSPO2 = TRUE.
+  - finger_detected_count: số bản ghi finger_detected = TRUE.
+
+- Nhóm thống kê AI (ai_stats) từ bảng ai_predictions:
+  - prediction_count: tổng số bản ghi dự đoán trong ngày đó.
+  - probability_min / probability_max / probability_avg: min/max/avg của trường probability.
+  - anomaly_count: số lần prediction = 1 (bất thường).
+  - normal_count: số lần prediction = 0 (bình thường).
+  - anomaly_rate: tỷ lệ bất thường = anomaly_count / prediction_count (0 nếu prediction_count=0).
+
+- Nhóm meta (meta):
+  - generated_at: thời điểm transcript được sinh ra (UTC, ISO 8601, ví dụ "2025-01-02T00:05:00Z").
+  - source: "mariadb".
+  - version: phiên bản schema transcript (ví dụ "1.0").
+
+Ví dụ khung JSON:
+
+{
+  "trace_id": "AA:BB:CC:DD:EE:FF_2025-01-01",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "date": "2025-01-01",
+  "time_range": {
+    "start": "2025-01-01T00:01:10Z",
+    "end": "2025-01-01T23:58:40Z"
+  },
+  "sensor_stats": {
+    "count": 1234,
+    "bpm_min": 60,
+    "bpm_max": 120,
+    "bpm_avg": 75.2,
+    "spo2_min": 92,
+    "spo2_max": 99,
+    "spo2_avg": 97.1,
+    "temp_min": 36.0,
+    "temp_max": 38.0,
+    "temp_avg": 36.7,
+    "ax_g_min": -0.5,
+    "ax_g_max": 0.6,
+    "ax_g_avg": 0.12,
+    "valid_bpm_count": 1200,
+    "valid_spo2_count": 1180,
+    "finger_detected_count": 1100
+  },
+  "ai_stats": {
+    "prediction_count": 456,
+    "probability_min": 0.01,
+    "probability_max": 0.98,
+    "probability_avg": 0.21,
+    "anomaly_count": 36,
+    "normal_count": 420,
+    "anomaly_rate": 0.079
+  },
+  "meta": {
+    "generated_at": "2025-01-02T00:05:00Z",
+    "source": "mariadb",
+    "version": "1.0"
+  }
+}
+
+Lưu ý:
+- TOÀN BỘ các giá trị thời gian trong transcript (time_range.start/end, meta.generated_at) đều dùng UTC.
+- Không lưu từng bản ghi raw hay từng dòng dự đoán AI → file nhẹ hơn, phù hợp lưu trữ lâu dài trên Filecoin.
+
+-------------------------------------------------------------------------------
+2. CẤU TRÚC THƯ MỤC DỮ LIỆU CHUNG (./data)
+-------------------------------------------------------------------------------
+
+- Sử dụng một thư mục chung ./data trên host, mount vào các service có liên quan.
+
+Cấu trúc đề xuất:
+
+- ./data/
+  - transcripts/
+    - <trace-id>.json          # Transcript tổng hợp theo ngày cho từng thiết bị
+  - filecoin/
+    - deal_<deal_id>.json      # Metadata Filecoin giả lập (mock)
+    - lighthouse_<cid>.json    # Metadata Filecoin thật (provider = "lighthouse")
+
+- Các service liên quan (ví dụ transcript_builder, filecoin_uploader) sẽ mount:
+  - ./data:/app/data
+
+-------------------------------------------------------------------------------
+3. THIẾT KẾ & TRIỂN KHAI SERVICE TRANSCRIPT BUILDER
+-------------------------------------------------------------------------------
+
+3.1. Vị trí & nhiệm vụ
+
+- Tạo thư mục mới: services/transcript_builder/
+  - main.py               : code chính của service.
+  - requirements.txt      : mysql-connector-python (hoặc pymysql), python-dateutil nếu cần.
+- Nhiệm vụ:
+  - Kết nối MariaDB (giống pattern trong services/api_server/main.py).
+  - Định kỳ (service chạy liên tục) quét dữ liệu theo ngày + thiết bị.
+  - Sinh transcript JSON (chỉ thống kê) và ghi vào data/transcripts/ theo trace_id.
+  - Làm việc với múi giờ UTC.
+
+3.2. Biến môi trường & cấu hình
+
+- Sử dụng các biến giống API/database_worker (có thể tái sử dụng):
+  - MYSQL_HOST=mariadb
+  - MYSQL_DATABASE=iot_data
+  - MYSQL_USER=myuser
+  - MYSQL_PASSWORD=mypassword
+- Thêm các biến riêng cho transcript builder (tuỳ chọn):
+  - TRANSCRIPTS_DIR=/app/data/transcripts
+  - TRANSCRIPT_LOOP_INTERVAL_SEC=300   # 5 phút, hoặc 600 (10 phút), v.v.
+
+3.3. Logic tính ngày & múi giờ (UTC)
+
+- Mọi việc nhóm theo ngày đều tính trên UTC:
+  - Khi transcript builder chạy, lấy "ngày UTC hiện tại" (today_utc).
+  - Có thể xử lý:
+    - Ngày hôm nay (today_utc).
+    - Ngày hôm qua (today_utc - 1 ngày), để kết thúc dữ liệu còn sót.
+- Khi truy vấn DB:
+  - Dùng điều kiện DATE(timestamp_column) = %s giả định DB đang lưu time tương thích UTC (hoặc server DB chạy UTC).
+  - Nếu DB lưu timezone khác, cần chuẩn hoá về UTC trước (giai đoạn sau).
+
+3.4. Các bước truy vấn & sinh transcript cho một (mac, date)
+
+Giả sử đầu vào:
+- mac: địa chỉ MAC.
+- date_str: "YYYY-MM-DD" (UTC).
+- trace_id = f"{mac}_{date_str}".
+
+1) Lấy time_range từ sensor_readings (nếu có bản ghi):
+   - Query:
+     SELECT 
+       MIN(received_at) AS start_time,
+       MAX(received_at) AS end_time
+     FROM sensor_readings
+     WHERE mac_address = %s 
+       AND DATE(received_at) = %s;
+   - Nếu không có dòng nào: có thể bỏ qua transcript hoặc đánh dấu count = 0, time_range = null.
+   - Convert start_time, end_time sang chuỗi ISO 8601 dạng "YYYY-MM-DDTHH:MM:SSZ".
+
+2) Tính sensor_stats từ sensor_readings:
+   - Query ví dụ:
+     SELECT
+       COUNT(*) AS count,
+       MIN(bpm) AS bpm_min,
+       MAX(bpm) AS bpm_max,
+       AVG(bpm) AS bpm_avg,
+       MIN(spo2) AS spo2_min,
+       MAX(spo2) AS spo2_max,
+       AVG(spo2) AS spo2_avg,
+       MIN(temp) AS temp_min,
+       MAX(temp) AS temp_max,
+       AVG(temp) AS temp_avg,
+       MIN(ax_g) AS ax_g_min,
+       MAX(ax_g) AS ax_g_max,
+       AVG(ax_g) AS ax_g_avg,
+       SUM(CASE WHEN validBPM = 1 THEN 1 ELSE 0 END) AS valid_bpm_count,
+       SUM(CASE WHEN validSPO2 = 1 THEN 1 ELSE 0 END) AS valid_spo2_count,
+       SUM(CASE WHEN finger_detected = 1 THEN 1 ELSE 0 END) AS finger_detected_count
+     FROM sensor_readings
+     WHERE mac_address = %s
+       AND DATE(received_at) = %s;
+
+3) Tính ai_stats từ ai_predictions:
+   - Query ví dụ:
+     SELECT
+       COUNT(*) AS prediction_count,
+       MIN(probability) AS probability_min,
+       MAX(probability) AS probability_max,
+       AVG(probability) AS probability_avg,
+       SUM(CASE WHEN prediction = 1 THEN 1 ELSE 0 END) AS anomaly_count,
+       SUM(CASE WHEN prediction = 0 THEN 1 ELSE 0 END) AS normal_count
+     FROM ai_predictions
+     WHERE mac_address = %s
+       AND DATE(analyzed_at) = %s;
+   - Sau đó tính anomaly_rate trong code Python:
+     - Nếu prediction_count > 0:
+       anomaly_rate = anomaly_count / prediction_count
+     - Nếu prediction_count = 0:
+       anomaly_rate = 0.
+
+4) Dựng object transcript trong Python:
+   - Theo schema ở mục 1.2, sử dụng:
+     - trace_id, mac, date (chuỗi).
+     - time_range.start/end (hoặc null nếu không có dữ liệu).
+     - sensor_stats lấy từ kết quả query (cẩn thận với None).
+     - ai_stats từ kết quả query và anomaly_rate tính thêm.
+     - meta.generated_at = now_utc (ISO 8601 với "Z"), source="mariadb", version="1.0".
+
+5) Ghi transcript ra file JSON:
+   - Đảm bảo TRANSCRIPTS_DIR tồn tại (tạo thư mục nếu chưa có).
+   - Đường dẫn file:
+     path = TRANSCRIPTS_DIR / f"{trace_id}.json"
+   - Ghi JSON với indent=2 (cho dễ đọc).
+   - Cho phép ghi đè nếu file đã tồn tại (idempotent).
+
+3.5. Vòng lặp service chạy liên tục
+
+- Pseudo-code logic chính của transcript_builder:
+
+  while True:
+      now_utc = datetime.utcnow().date()
+      days_to_process = [now_utc, now_utc - 1 day]
+
+      for each day in days_to_process:
+          - Lấy danh sách MAC cần xử lý (distinct mac_address)
+            từ sensor_readings và/hoặc ai_predictions cho ngày đó.
+          - Với mỗi mac trong danh sách:
+              - Gọi hàm generate_transcript(mac, day) như mô tả 3.4.
+
+      sleep(TRANSCRIPT_LOOP_INTERVAL_SEC)
+
+- Nhờ idempotent, mỗi lần chạy lại chỉ đơn giản là refresh file transcript cho ngày hôm nay / hôm qua.
+
+-------------------------------------------------------------------------------
+4. THIẾT KẾ & TRIỂN KHAI SERVICE FILECOIN UPLOADER
+-------------------------------------------------------------------------------
+
+4.1. Vị trí & vai trò
+
+- Tạo thư mục mới: services/filecoin_uploader/
+  - main.py               : code chính.
+  - requirements.txt      : requests (hoặc httpx), watchfiles, v.v.
+- Nhiệm vụ:
+  - Theo dõi thư mục data/transcripts/ để phát hiện transcript mới hoặc được cập nhật.
+  - Upload transcript đó lên Filecoin (qua Lighthouse nếu có LIGHTHOUSE_API_KEY, hoặc mock).
+  - Ghi metadata JSON vào data/filecoin/ kèm thêm hash_transcript, mac, date, trace_id.
+  - Cập nhật bảng DB daily_transcripts (mục 5).
+
+4.2. Biến môi trường & cấu hình
+
+- Biến chính:
+  - LIGHTHOUSE_API_KEY  : nếu set → upload thật; nếu rỗng/không có → mock.
+- Thư mục:
+  - TRANSCRIPTS_DIR=/app/data/transcripts
+  - FILECOIN_DIR=/app/data/filecoin
+- URL Lighthouse:
+  - LIGHTHOUSE_UPLOAD_URL="https://node.lighthouse.storage/api/v0/add"
+
+4.3. Tính hash_transcript
+
+- Với mỗi transcript file, trước khi upload:
+  - Đọc toàn bộ nội dung file transcript (bytes hoặc chuỗi UTF-8).
+  - Tính SHA-256 (ví dụ bằng hashlib.sha256 in Python).
+  - Chuyển sang chuỗi hex (hex string) → hash_transcript.
+- hash_transcript sẽ được đưa vào metadata JSON để:
+  - Kiểm tra toàn vẹn khi cần (hash lại transcript rồi so).
+
+4.4. Cấu trúc metadata Filecoin (ghi vào data/filecoin/)
+
+- Chế độ mock (không có LIGHTHOUSE_API_KEY):
+  - Ghi file: data/filecoin/deal_<deal_id>.json
+  - Nội dung gợi ý:
+
+  {
+    "provider": "mock",
+    "cid": "<fake_cid_hex>",
+    "transcript": "AA:BB:..._2025-01-01.json",
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "date": "2025-01-01",
+    "trace_id": "AA:BB:CC:DD:EE:FF_2025-01-01",
+    "deal_id": "<fake_deal_id>",
+    "status": "submitted",
+    "hash_transcript": "<sha256_hex>"
+  }
+
+- Chế độ thật (có LIGHTHOUSE_API_KEY):
+  - Ghi file: data/filecoin/lighthouse_<cid>.json
+  - Nội dung gợi ý:
+
+  {
+    "provider": "lighthouse",
+    "cid": "<real_or_fallback_cid>",
+    "transcript": "AA:BB:..._2025-01-01.json",
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "date": "2025-01-01",
+    "trace_id": "AA:BB:CC:DD:EE:FF_2025-01-01",
+    "deal_id": "<deal_id_or_null>",
+    "hash_transcript": "<sha256_hex>",
+    "response": { ... toàn bộ JSON trả về từ Lighthouse ... }
+  }
+
+4.5. Hàm _mock_deal(transcript_file)
+
+- Mục đích: Sinh CID và deal_id giả khi không dùng Lighthouse thật.
+- Cách làm:
+  - Đọc toàn bộ bytes của transcript_file.
+  - Lấy 32 byte cuối → chuyển thành số nguyên → đưa vào hàm băm (poseidon_like_hash hoặc đơn giản là SHA-256) → mod 10^12 → deal_id giả (12 chữ số).
+  - Lấy 32 byte đầu → băm SHA-256 → chuỗi hex → cid giả.
+
+4.6. Hàm _lighthouse_upload(api_key, transcript_file)
+
+- Mục đích: Gửi transcript lên Lighthouse khi có LIGHTHOUSE_API_KEY.
+- Cách làm:
+  - Mở transcript_file dạng nhị phân.
+  - Tạo multipart/form-data với field "file".
+  - Gửi POST tới LIGHTHOUSE_UPLOAD_URL với header:
+    Authorization: Bearer <LIGHTHOUSE_API_KEY>
+  - Nếu HTTP không 2xx hoặc lỗi mạng: ném exception (RequestException).
+  - Ngược lại: trả về response.json() (dict).
+
+4.7. Hàm push_to_filecoin(transcript_file)
+
+- Mục đích: Hàm trung tâm để:
+  - Đọc transcript, tính hash_transcript.
+  - Quyết định chế độ mock hay thật.
+  - Ghi metadata JSON.
+  - Cập nhật bảng DB daily_transcripts.
+
+Quy trình:
+
+1) Đọc transcript_file:
+   - Parse JSON để lấy trace_id, mac, date.
+   - Đọc bytes để tính hash_transcript.
+
+2) Kiểm tra LIGHTHOUSE_API_KEY:
+   - Nếu không có → nhánh mock:
+     - Gọi _mock_deal(transcript_file) → (deal_id, cid).
+     - Tạo metadata như mục 4.4 (provider="mock").
+     - Ghi vào data/filecoin/deal_<deal_id>.json.
+   - Nếu có → nhánh Lighthouse thật:
+     - Gọi _lighthouse_upload(api_key, transcript_file) trong executor (tránh block event loop nếu dùng async).
+     - Phân tích response để lấy cid & deal_id:
+       - cid trong response["data"]["Hash"] hoặc "cid" hoặc "CID".
+       - deal_id trong response["dealStatus"] hoặc "dealInfo" (list/dict), key "dealId"/"deal_id"/"deal".
+       - Nếu không tìm được cid, fallback: tự băm transcript.
+     - Tạo metadata như mục 4.4 (provider="lighthouse").
+     - Ghi vào data/filecoin/lighthouse_<cid>.json.
+
+3) Cập nhật bảng daily_transcripts (mục 5):
+   - Ghi/Update filecoin_cid, filecoin_deal_id, filecoin_provider, status="uploaded" (hoặc "submitted").
+
+4) Log lại kết quả:
+   - Ví dụ: "Filed transcript <trace_id> to Filecoin via <provider> (deal_id=..., cid=...)".
+
+4.8. Watcher theo dõi thư mục transcript (dùng watchfiles)
+
+- Sử dụng watchfiles.awatch(TRANSCRIPTS_DIR) để lắng nghe file mới / thay đổi.
+- Pseudo-code:
+
+  processed = set()
+
+  async def monitor():
+      ensure TRANSCRIPTS_DIR and FILECOIN_DIR exist
+
+      async for changes in awatch(TRANSCRIPTS_DIR):
+          for change_type, path_str in changes:
+              path = Path(path_str)
+              if path.suffix != ".json":
+                  continue
+
+              # Có thể thêm logic:
+              # - Nếu muốn xử lý lại khi file sửa, có thể bỏ processed hoặc dùng hash.
+              if path.name in processed:
+                  continue
+
+              await push_to_filecoin(path)
+              processed.add(path.name)
+
+- Vì transcript_builder có thể ghi đè file, nên:
+  - Hoặc bỏ cơ chế processed (chấp nhận upload lại → nhiều deal cho cùng transcript).
+  - Hoặc dùng processed theo (trace_id, hash_transcript) để tránh upload lại nếu không đổi nội dung.
+  - Giai đoạn đầu, có thể giữ processed đơn giản hoặc chấp nhận upload lại trong quá trình thử nghiệm.
+
+-------------------------------------------------------------------------------
+5. THIẾT KẾ BẢNG DB daily_transcripts & LUỒNG CẬP NHẬT
+-------------------------------------------------------------------------------
+
+5.1. Mục tiêu
+
+- Dễ dàng tra cứu transcript & trạng thái Filecoin từ API (không cần quét file).
+- Mỗi (mac, date) có tối đa 1 bản ghi trong bảng daily_transcripts.
+
+5.2. Cấu trúc bảng gợi ý
+
+CREATE TABLE daily_transcripts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mac_address VARCHAR(64) NOT NULL,
+    date DATE NOT NULL,
+    trace_id VARCHAR(128) NOT NULL,
+    transcript_path VARCHAR(255) NOT NULL,
+    filecoin_cid VARCHAR(128),
+    filecoin_deal_id VARCHAR(128),
+    filecoin_provider VARCHAR(32),
+    status ENUM('pending','uploading','uploaded','failed') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_mac_date (mac_address, date)
+);
+
+5.3. Cách sử dụng bảng này trong pipeline
+
+- Khi transcript_builder sinh transcript mới cho (mac, date):
+  - Nếu chưa có bản ghi trong daily_transcripts:
+    - INSERT với status='pending', transcript_path trỏ tới data/transcripts/<trace_id>.json.
+  - Nếu đã có:
+    - UPDATE transcript_path (nếu thay đổi) và đặt lại status='pending' (nếu muốn re-upload).
+
+- Khi filecoin_uploader upload transcript thành công:
+  - UPDATE:
+    - filecoin_cid
+    - filecoin_deal_id
+    - filecoin_provider ("mock" hoặc "lighthouse")
+    - status='uploaded' (hoặc 'submitted' nếu còn đợi confirm).
+
+- Khi upload thất bại:
+  - status='failed' và log lỗi chi tiết.
+
+-------------------------------------------------------------------------------
+6. MỞ RỘNG API SERVER ĐỂ HỖ TRỢ TRANSCRIPT & FILECOIN
+-------------------------------------------------------------------------------
+
+6.1. Mục tiêu
+
+- Cho phép dashboard/API khách truy vấn:
+  - Danh sách các ngày có transcript cho một thiết bị.
+  - Chi tiết một transcript (nội dung JSON) và metadata Filecoin tương ứng.
+
+6.2. Endpoint gợi ý
+
+1) GET /transcripts/{mac}
+   - Query daily_transcripts theo mac_address, trả về danh sách:
+     - date
+     - trace_id
+     - status
+     - filecoin_cid
+     - filecoin_deal_id
+     - filecoin_provider
+   - Có thể kèm theo link nội bộ tới transcript_path.
+
+2) GET /transcripts/{mac}/{date}
+   - Tìm bản ghi daily_transcripts theo (mac, date).
+   - Đọc file transcript tương ứng (transcript_path), parse JSON.
+   - Đọc metadata Filecoin tương ứng trong data/filecoin/ (theo filecoin_cid/deal_id).
+   - Trả về object gồm:
+     - transcript: {...}
+     - filecoin: {... metadata ...}
+
+6.3. Tích hợp vào services/api_server
+
+- Sử dụng cùng hàm get_db_connection như sẵn có.
+- Thêm model Pydantic cho daily_transcripts và transcript response.
+- Cần mount ./data vào api_server nếu API muốn đọc trực tiếp file transcript/metadata.
+
+-------------------------------------------------------------------------------
+7. TÍCH HỢP VÀO DOCKER-COMPOSE & TRIỂN KHAI
+-------------------------------------------------------------------------------
+
+7.1. Thêm volume ./data dùng chung
+
+- Trong docker-compose.yml, thêm volume bind cho các service mới và (nếu cần) api_server:
+
+  transcript_builder:
+    build: ./services/transcript_builder
+    container_name: transcript_builder
+    restart: always
+    depends_on:
+      - mariadb
+    volumes:
+      - ./data:/app/data
+    environment:
+      - MYSQL_HOST=mariadb
+      - MYSQL_DATABASE=iot_data
+      - MYSQL_USER=myuser
+      - MYSQL_PASSWORD=mypassword
+
+  filecoin_uploader:
+    build: ./services/filecoin_uploader
+    container_name: filecoin_uploader
+    restart: always
+    depends_on:
+      - transcript_builder
+    volumes:
+      - ./data:/app/data
+    environment:
+      - LIGHTHOUSE_API_KEY=${LIGHTHOUSE_API_KEY:-}
+
+- (Tuỳ chọn) mount ./data vào api_server nếu API cần đọc file trực tiếp:
+
+  api_server:
+    ...
+    volumes:
+      - ./data:/app/data:ro
+
+7.2. Thêm requirements & Dockerfile cho các service mới
+
+- services/transcript_builder/requirements.txt:
+  - mysql-connector-python
+  - python-dateutil (tuỳ chọn)
+- services/filecoin_uploader/requirements.txt:
+  - requests (hoặc httpx)
+  - watchfiles
+
+- Dockerfile tương tự các service Python khác (ai_worker, database_worker, ...):
+  - FROM python:3.x-slim
+  - COPY requirements.txt .
+  - RUN pip install -r requirements.txt
+  - COPY . .
+  - CMD ["python", "main.py"]
+
+-------------------------------------------------------------------------------
+8. QUY TRÌNH TRIỂN KHAI TUẦN TỰ (TỪNG BƯỚC)
+-------------------------------------------------------------------------------
+
+1) Chuẩn bị cấu trúc ./data chung:
+   - Tạo thư mục ./data trong repo nếu chưa có.
+   - Bên trong, tạo sẵn:
+     - ./data/transcripts/
+     - ./data/filecoin/
+
+2) Tạo bảng daily_transcripts trong MariaDB:
+   - Chạy câu lệnh SQL ở mục 5.2 trên database iot_data.
+   - Xác nhận bảng được tạo thành công (dùng DBeaver).
+
+3) Thiết kế & hiện thực Transcript Builder:
+   - Tạo thư mục services/transcript_builder với main.py, requirements.txt, Dockerfile.
+   - Trong main.py:
+     - Kết nối DB bằng mysql-connector (giống api_server/database_worker).
+     - Implement hàm generate_transcript(mac, date_str) theo mục 3.4.
+     - Implement vòng lặp chính theo mục 3.5 (service chạy liên tục).
+     - Mỗi lần sinh transcript:
+       - Ghi file JSON vào data/transcripts/<trace-id>.json.
+       - INSERT/UPDATE bảng daily_transcripts tương ứng, status='pending'.
+
+4) Test Transcript Builder độc lập (chỉ local/dev):
+   - Chạy docker-compose up -d (hạ tầng).
+   - Chạy riêng container transcript_builder hoặc chạy script trực tiếp (python main.py).
+   - Kiểm tra:
+     - data/transcripts/ có file theo mac/date.
+     - Bảng daily_transcripts có bản ghi tương ứng.
+
+5) Thiết kế & hiện thực Filecoin Uploader (mock trước):
+   - Tạo thư mục services/filecoin_uploader với main.py, requirements.txt, Dockerfile.
+   - Implement:
+     - _mock_deal(transcript_file) theo mục 4.5.
+     - push_to_filecoin(transcript_file) theo mục 4.7 (nhánh mock).
+     - monitor() dùng watchfiles.awatch theo mục 4.8.
+   - Tạm thời KHÔNG đặt LIGHTHOUSE_API_KEY (để chạy mock).
+
+6) Test Filecoin Uploader ở chế độ mock:
+   - Chạy container filecoin_uploader (hoặc script).
+   - Đảm bảo transcript_builder đang sinh transcript (hoặc tự đặt 1 file transcript mẫu vào data/transcripts/).
+   - Kiểm tra:
+     - data/filecoin/deal_<deal_id>.json xuất hiện.
+     - Trong metadata có đầy đủ mac, date, trace_id, hash_transcript, cid, provider="mock".
+     - Bảng daily_transcripts được cập nhật filecoin_cid, filecoin_deal_id, filecoin_provider="mock", status="uploaded".
+
+7) Tích hợp API để đọc transcript & metadata:
+   - Mở rộng services/api_server:
+     - Thêm model Pydantic và endpoint theo mục 6.2.
+     - Nếu cần đọc file transcript/metadata:
+       - Mount ./data:/app/data:ro trong docker-compose.
+   - Test:
+     - Gọi /transcripts/{mac} xem danh sách.
+     - Gọi /transcripts/{mac}/{date} xem chi tiết transcript + filecoin.
+
+8) Kết nối thật với Lighthouse (Filecoin thật):
+   - Lấy LIGHTHOUSE_API_KEY từ tài khoản Lighthouse.
+   - Đặt biến môi trường này cho service filecoin_uploader (qua docker-compose hoặc file .env).
+   - Cập nhật main.py của filecoin_uploader:
+     - Implement _lighthouse_upload() theo mục 4.6.
+     - Trong push_to_filecoin(), thêm nhánh chế độ thật.
+   - Chạy lại service, kiểm tra log:
+     - Có upload thành công không.
+     - data/filecoin/lighthouse_<cid>.json được tạo.
+     - Bảng daily_transcripts cập nhật provider="lighthouse", filecoin_cid, filecoin_deal_id.
+
+9) Kiểm tra từ Dashboard & giám sát:
+   - Dashboard gọi API mới để hiển thị list transcript & trạng thái Filecoin theo thiết bị/ngày.
+   - Nếu cần, thêm link từ dashboard tới portal Lighthouse (sử dụng cid).
+   - Giám sát log của transcript_builder và filecoin_uploader để:
+     - Phát hiện sớm lỗi DB, lỗi Lighthouse, lỗi network.
+
+10) Chuẩn hoá & bảo mật:
+   - Đảm bảo LIGHTHOUSE_API_KEY KHÔNG được commit vào repo (dùng .env, secret manager).
+   - Xem xét giới hạn tần suất sinh transcript (để tránh sinh quá nhiều file nếu dữ liệu ít).
+   - Sau khi chạy ổn định ở chế độ mock, mới bật kết nối thật trong môi trường cần thiết (staging/production).
+
+Với quy trình và lựa chọn ở trên, hệ thống IoT hiện tại của bạn sẽ:
+- Tự động tổng hợp dữ liệu cảm biến & AI theo ngày/thiết bị thành transcript thống kê.
+- Lưu transcript đó lên Filecoin (mock hoặc thật) bằng Lighthouse.
+- Lưu trữ metadata có hash_transcript, mac, date, trace_id trong file JSON và bảng DB, hỗ trợ tra cứu, kiểm tra toàn vẹn và hiển thị trên dashboard.

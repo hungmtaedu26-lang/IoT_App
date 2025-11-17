@@ -1,0 +1,8 @@
+fastapi>=0.109
+uvicorn[standard]>=0.23
+requests>=2.31
+pydantic>=2.5
+python-dotenv>=1.0
+watchfiles>=0.21
+pysnark>=0.7; platform_system != "Windows"
+web3>=6.0

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zk-SNARK Transfer Simulator</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    <main class="container">
+        <h1>zk-SNARK Secure Transfer</h1>
+        <section class="panel">
+            <form id="transfer-form">
+                <div class="field">
+                    <label for="sender_balance">Sender balance</label>
+                    <input type="number" id="sender_balance" name="sender_balance" value="100" min="0" required />
+                </div>
+                <div class="field">
+                    <label for="receiver_balance">Receiver balance</label>
+                    <input type="number" id="receiver_balance" name="receiver_balance" value="150" min="0" required />
+                </div>
+                <div class="field">
+                    <label for="amount">Amount</label>
+                    <input type="number" id="amount" name="amount" value="10" min="1" required />
+                </div>
+                <button type="submit">Transfer with zk-SNARK</button>
+            </form>
+        </section>
+        <section class="panel" id="result" hidden>
+            <h2>Result</h2>
+            <pre id="result-json"></pre>
+        </section>
+        <section class="panel" id="status">
+            <h2>Status</h2>
+            <p>Backend: <span id="backend-name">unknown</span></p>
+        </section>
+    </main>
+    <script src="/static/script.js"></script>
+</body>
+</html>

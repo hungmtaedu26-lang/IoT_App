@@ -1,0 +1,23 @@
+{
+  "status": "verified",
+  "proof": {
+    "type": "mock",
+    "backend": "mock-groth16",
+    "trace_id": "746fac2d2015478ca79d1344c67b5d2d",
+    "commitments": {
+      "sender_commitment_before": 24123914534168392333152203032077689170637240383297668964379013003250432865281,
+      "receiver_commitment_before": 41899633984360876743488305189734929964886774095237627596914640100841972380379,
+      "sender_commitment_after": 13177215306357590605690660665879175423220432494616965465806332697672513657050,
+      "receiver_commitment_after": 24185906390687947791424461154811475906684059999303204780690402141274450580818
+    }
+  },
+  "public": {
+    "amount": 10,
+    "sender_after": 90,
+    "receiver_after": 160
+  },
+  "witness": {
+    "sender_before": 100,
+    "receiver_before": 150
+  }
+}

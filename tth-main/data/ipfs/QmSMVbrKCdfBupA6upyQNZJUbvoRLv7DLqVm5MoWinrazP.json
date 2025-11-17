@@ -1,0 +1,17 @@
+{
+  "provider": "pinata",
+  "cid": "QmSMVbrKCdfBupA6upyQNZJUbvoRLv7DLqVm5MoWinrazP",
+  "size": 587,
+  "proof_path": "C:\\Users\\PC\\Desktop\\zk-snark\\tth\\data\\proofs\\b50d61d119154caf853413a5ebb9ac53\\proof.json",
+  "pinata_response": {
+    "IpfsHash": "QmSMVbrKCdfBupA6upyQNZJUbvoRLv7DLqVm5MoWinrazP",
+    "PinSize": 587,
+    "Timestamp": "2025-09-30T06:13:12.520Z",
+    "ID": "1aada3bb-d876-4153-9c7c-5e7dc60a251e",
+    "Name": "proof.json",
+    "NumberOfFiles": 1,
+    "MimeType": "application/json",
+    "GroupId": null,
+    "Keyvalues": null
+  }
+}

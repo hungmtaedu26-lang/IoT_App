@@ -1,0 +1,9 @@
+# PySNARK equations
+[function] main main
+* = 1 main/one -1 main/onex
+* = 1 main/1 -1 main/o_1
+1 main/2 * -1 main/2 1 main/onex =  .
+1 main/3 * -1 main/3 1 main/onex =  .
+1 main/4 * -1 main/4 1 main/onex =  .
+1 main/5 * -1 main/5 1 main/onex =  .
+ *  = 1 main/1 -1 main/2 -2 main/3 -4 main/4 -8 main/5 .

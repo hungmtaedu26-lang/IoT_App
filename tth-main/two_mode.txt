@@ -1,0 +1,310 @@
+GIẢI THÍCH HAI CHẾ ĐỘ GIẢ LẬP VÀ THẬT
+TRONG LƯU TRỮ IPFS / FILECOIN
+
+--------------------------------------------------
+1. MỤC TIÊU CỦA HAI CHẾ ĐỘ
+--------------------------------------------------
+Hệ thống được thiết kế để hoạt động linh hoạt trong hai bối cảnh:
+
+- CHẾ ĐỘ GIẢ LẬP (mock):
+  Dùng cho môi trường học tập, demo, thử nghiệm nhanh, không cần
+  kết nối mạng và không cần tài khoản trên các dịch vụ thật.
+  Mọi thứ (CID, deal_id) được sinh ra bằng thuật toán băm giả lập,
+  nhưng cấu trúc dữ liệu vẫn giống như đang dùng dịch vụ thật.
+
+- CHẾ ĐỘ THẬT (real):
+  Dùng khi muốn kết nối với hệ sinh thái thực tế:
+  - Pinata cho IPFS (lưu trữ proof).
+  - Lighthouse cho Filecoin (lưu trữ transcript).
+  Các uploader gọi API thật, nhận về CID, dealId, trạng thái thực.
+
+Điểm quan trọng: chọn chế độ chỉ phụ thuộc vào biến môi trường,
+không phải sửa code:
+- IPFS: dựa vào biến PINATA_JWT.
+- Filecoin: dựa vào biến LIGHTHOUSE_API_KEY.
+
+
+--------------------------------------------------
+2. IPFS – CHẾ ĐỘ GIẢ LẬP VÀ PINATA THẬT
+--------------------------------------------------
+
+2.1. Dòng chảy chung IPFS
+
+1) SNARK Runner tạo proof cho mỗi giao dịch và ghi vào:
+   data/proofs/<trace-id>/
+   với các file:
+   - proof.json
+   - public.json
+   - witness.json
+
+2) Dịch vụ IPFS Uploader (services/storage/ipfs.py):
+   - Sử dụng watchfiles.awatch để theo dõi thư mục data/proofs/.
+   - Khi có thư mục mới (ứng với một trace_id mới), nó gọi
+     hàm upload_to_ipfs(proof_dir) để xử lý.
+
+3) upload_to_ipfs(proof_dir) luôn hướng tới cùng một mục tiêu:
+   - Tạo ra một “record” mô tả việc lưu trữ proof trên IPFS,
+     và ghi record này dưới dạng JSON trong data/ipfs/.
+   - Tùy vào cấu hình mà record đó dựa trên số liệu giả lập
+     hay dữ liệu thật từ Pinata.
+
+
+2.2. Chế độ GIẢ LẬP IPFS (không có PINATA_JWT)
+
+Điều kiện kích hoạt:
+- Trong file .env KHÔNG đặt PINATA_JWT, hoặc để chuỗi rỗng.
+
+Cách hoạt động chi tiết:
+
+1) IPFS Uploader phát hiện thư mục data/proofs/<trace-id>/ mới.
+2) Đảm bảo proof.json tồn tại; nếu không, bỏ qua.
+3) Gọi hàm _mock_cid(proof_file):
+   - Đọc dữ liệu nhị phân của proof.json.
+   - Lấy 32 byte đầu tiên.
+   - Chuyển 32 byte này thành một số nguyên.
+   - Đưa số đó vào poseidon_like_hash (hiện thực bằng SHA-256).
+   - Kết quả là một số nguyên lớn, được chuyển sang dạng hex
+     (bỏ tiền tố "0x") → coi như một CID giả lập.
+   - Đồng thời đo kích thước file (len(data)).
+
+4) Xây dựng payload dạng JSON:
+   - provider: "mock"
+   - cid: CID giả lập vừa sinh ra
+   - size: kích thước thực của proof.json
+   - proof_path: đường dẫn tuyệt đối hoặc tương đối tới proof.json
+
+5) Ghi payload vào file:
+   data/ipfs/<cid>.json
+
+Ý nghĩa:
+- Không cần internet, không cần tài khoản Pinata.
+- Vẫn có CID, size và đường dẫn proof để các phần khác trong hệ
+  thống có thể hoạt động (tìm CID từ trace_id, hiển thị log, v.v.).
+- Cấu trúc file JSON giống chế độ thật nên những phần khác
+  không cần biết đang chạy giả lập.
+
+
+2.3. Chế độ PINATA THẬT (có PINATA_JWT)
+
+Điều kiện kích hoạt:
+- Trong .env có dòng:
+  PINATA_JWT=<token_Pinata_hợp_lệ>
+
+Cách hoạt động chi tiết:
+
+1) Vẫn cùng quy trình phát hiện thư mục proof mới như trên.
+2) Thay vì dùng _mock_cid, uploader kiểm tra settings.pinata_jwt:
+   - Nếu có JWT, gọi hàm _pinata_upload(jwt, proof_file).
+
+3) Hàm _pinata_upload:
+   - Mở proof.json dạng nhị phân.
+   - Tạo multipart/form-data với field "file" chứa proof.json.
+   - Gửi POST tới:
+       https://api.pinata.cloud/pinning/pinFileToIPFS
+     với header:
+       Authorization: Bearer <PINATA_JWT>
+   - Nếu HTTP không 2xx hoặc lỗi mạng, ném RequestException.
+   - Ngược lại, trả về response.json() (dict Python).
+
+4) upload_to_ipfs phân tích response:
+   - Lấy CID từ các trường phổ biến:
+     IpfsHash hoặc cid (tùy phiên bản API).
+   - Lấy size từ PinSize; nếu không có hoặc lỗi kiểu dữ liệu,
+     fallback về kích thước thực của proof.json.
+
+5) Tạo payload JSON:
+   - provider: "pinata"
+   - cid: CID thật từ Pinata
+   - size: kích thước (PinSize hoặc kích thước file)
+   - proof_path: đường dẫn proof.json
+   - pinata_response: nguyên response JSON từ Pinata
+
+6) Ghi payload vào:
+   data/ipfs/<cid>.json
+
+Lưu ý khi dùng thật:
+- Cần internet và token Pinata còn hiệu lực.
+- Nếu Pinata bị lỗi (timeout, 401, 429…), uploader log lỗi và trả
+  False → không tạo file metadata cho lần đó.
+- Cần bảo vệ PINATA_JWT (không commit lên Git, dùng secret).
+- CID là thật, có thể kiểm tra bằng gateway IPFS/Pinata.
+
+
+--------------------------------------------------
+3. FILECOIN – GIẢ LẬP VÀ LIGHTHOUSE THẬT
+--------------------------------------------------
+
+3.1. Dòng chảy chung Filecoin
+
+1) Sau khi proof được xác minh, Smart-contract Listener ghi:
+   data/transcripts/<trace-id>.json
+   Đây là transcript chứa thông tin proof, public, witness (đã lọc),
+   và trạng thái "verified".
+
+2) Dịch vụ Filecoin Uploader (services/storage/filecoin.py):
+   - Sử dụng watchfiles.awatch để theo dõi thư mục data/transcripts/.
+   - Khi có file .json mới, nó gọi push_to_filecoin(transcript_file).
+
+3) push_to_filecoin luôn tạo một record mô tả việc gửi transcript
+   tới "Filecoin" (thật hoặc giả), rồi ghi record đó trong data/filecoin/.
+
+
+3.2. Chế độ GIẢ LẬP FILECOIN (không có LIGHTHOUSE_API_KEY)
+
+Điều kiện kích hoạt:
+- Trong .env KHÔNG có LIGHTHOUSE_API_KEY, hoặc để trống.
+
+Cách hoạt động chi tiết:
+
+1) Filecoin Uploader phát hiện transcript mới.
+2) Gọi _mock_deal(transcript_file):
+   - Đọc toàn bộ nội dung transcript.
+   - Lấy 32 byte cuối, chuyển thành số nguyên, băm bằng
+     poseidon_like_hash rồi mod 10^12 → deal_id giả lập.
+   - Lấy 32 byte đầu, băm poseidon_like_hash → cid giả lập
+     (dạng hex string).
+
+3) Tạo record JSON:
+   - provider: "mock"
+   - cid: CID giả lập
+   - transcript: tên file transcript (ví dụ 123abc.json)
+   - deal_id: deal_id giả
+   - status: "submitted"
+
+4) Ghi record vào:
+   data/filecoin/deal_<deal_id>.json
+
+Ý nghĩa:
+- Giả lập việc "gửi deal lên Filecoin" mà không cần mạng.
+- Có deal_id và cid để các công cụ hiển thị, audit hoặc demo.
+- Giữ chung schema với chế độ thật ở mức cơ bản.
+
+
+3.3. Chế độ LIGHTHOUSE THẬT (có LIGHTHOUSE_API_KEY)
+
+Điều kiện kích hoạt:
+- Trong .env có:
+  LIGHTHOUSE_API_KEY=<key_Lighthouse_hợp_lệ>
+
+Cách hoạt động chi tiết:
+
+1) Filecoin Uploader phát hiện transcript mới.
+2) Do có api_key, push_to_filecoin gọi _lighthouse_upload(api_key, transcript_file).
+
+3) Hàm _lighthouse_upload:
+   - Mở transcript.json dạng nhị phân.
+   - Tạo multipart/form-data, field "file" chứa transcript.
+   - POST tới:
+       https://node.lighthouse.storage/api/v0/add
+     với header:
+       Authorization: Bearer <LIGHTHOUSE_API_KEY>
+   - Nếu lỗi HTTP hoặc mạng, ném RequestException và trả lỗi.
+   - Ngược lại, trả về response.json().
+
+4) Phân tích response trong push_to_filecoin:
+   - Tìm CID trong:
+     response.data.Hash, hoặc data.cid, hoặc data.CID.
+     Nếu vẫn không có, fallback: băm 32 byte đầu transcript để sinh CID.
+   - Lấy danh sách deal từ response.dealStatus hoặc dealInfo...
+     (có thể là list hoặc dict), duyệt để tìm dealId/deal_id/deal.
+
+5) Tạo record JSON:
+   - provider: "lighthouse"
+   - cid: CID thật (hoặc fallback)
+   - transcript: tên file transcript
+   - deal_id: lấy từ dealStatus/dealInfo (có thể None nếu chưa có)
+   - response: toàn bộ JSON trả về từ Lighthouse
+
+6) Ghi record vào:
+   data/filecoin/lighthouse_<cid>.json
+
+Lưu ý khi dùng thật:
+- Cần internet và key Lighthouse hợp lệ.
+- Cần theo dõi log để biết upload có thành công hay không.
+- Cấu trúc response có thể thay đổi, nên khi nâng cấp API
+  cần kiểm tra lại logic trích CID, deal_id.
+- record trong data/filecoin/ là nguồn dữ liệu chính để kiểm tra
+  quá trình upload lên Lighthouse.
+
+
+--------------------------------------------------
+4. SO SÁNH VÀ LƯU Ý CHUNG HAI CHẾ ĐỘ
+--------------------------------------------------
+
+4.1. Mục đích sử dụng
+
+- Giả lập:
+  • Phù hợp cho phát triển, học tập, demo offline.
+  • Không có nguy cơ rò rỉ khóa/API key.
+  • Không tốn thời gian chờ mạng, không gặp lỗi rate limit.
+
+- Thật:
+  • Phù hợp cho môi trường staging/production hoặc demo nâng cao.
+  • Dữ liệu thực sự được lưu trên IPFS/Filecoin, có thể kiểm chứng
+    bằng công cụ bên ngoài.
+
+
+4.2. Giao diện thống nhất với các thành phần khác
+
+- Cả hai chế độ đều ghi metadata dưới dạng JSON vào:
+  • IPFS: data/ipfs/<cid>.json
+  • Filecoin: data/filecoin/deal_*.json hoặc lighthouse_<cid>.json
+
+- Các phần khác (smart_contract listener, Ethereum notifier, UI
+  giám sát, script audit) chỉ cần đọc các file JSON này mà không
+  cần biết backend đang là giả lập hay thật.
+
+- Nhờ đó, việc đổi backend (ví dụ Pinata → node IPFS riêng,
+  Lighthouse → dịch vụ Filecoin khác) chỉ cần thay phần upload,
+  còn giao ước file/metadata giữ nguyên.
+
+
+4.3. Bảo mật và vận hành
+
+- KHÔNG commit các biến nhạy cảm:
+  • PINATA_JWT
+  • LIGHTHOUSE_API_KEY
+
+- Nên sử dụng:
+  • .env local (không commit).
+  • Secret manager nếu deploy trên server/CI.
+
+- Luôn theo dõi log của các dịch vụ:
+  • ipfs_uploader
+  • filecoin_uploader
+  để phát hiện lỗi upload, timeout, cấu hình sai.
+
+- Fallback an toàn:
+  • Khi API thật không cung cấp đủ thông tin, mã đã có fallback
+    (tự băm tạo CID) để pipeline không bị gãy.
+
+
+4.4. Riêng tư và toàn vẹn dữ liệu
+
+- Proof và transcript có thể chứa thông tin nhạy cảm (dù đã được
+  che giấu phần nào nhờ zk-SNARK). Khi triển khai thực tế:
+  • Cân nhắc ẩn bớt dữ liệu witness trong transcript.
+  • Có thể mã hóa file transcript trước khi upload.
+  • Có thể thêm checksum hoặc chữ ký số vào metadata để
+    kiểm tra toàn vẹn.
+
+
+--------------------------------------------------
+5. KẾT LUẬN
+--------------------------------------------------
+
+Hai chế độ giả lập và thật được thiết kế sao cho:
+
+- Đối với lập trình viên và kiến trúc hệ thống:
+  • Chỉ cần bật/tắt các biến môi trường để chuyển từ môi trường
+    demo sang môi trường tích hợp thật.
+  • Không phải sửa kiến trúc hay giao diện giữa các dịch vụ.
+
+- Đối với người sử dụng/nhà nghiên cứu:
+  • Có thể bắt đầu bằng chế độ giả lập để hiểu luồng hoạt động,
+    rồi dần dần tích hợp Pinata/Lighthouse thực khi cần.
+
+Điểm cốt lõi là: pipeline logic (tạo proof → transcript → IPFS →
+Filecoin) luôn giữ nguyên; chỉ lớp “uploader” thay đổi cách tạo CID
+và deal dựa trên việc có hay không có kết nối tới dịch vụ thật.
+
