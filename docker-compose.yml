@@ -105,6 +105,8 @@ services:
       - mariadb
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
 
   mqtt_bridge:
     build: ./services/mqtt_bridge
@@ -113,6 +115,35 @@ services:
     depends_on:
       - kafka
       - hivemq
+
+  transcript_builder:
+    build: ./services/transcript_builder
+    container_name: transcript_builder
+    restart: always
+    depends_on:
+      - mariadb
+    volumes:
+      - ./data:/app/data
+    environment:
+      - MYSQL_HOST=mariadb
+      - MYSQL_DATABASE=iot_data
+      - MYSQL_USER=myuser
+      - MYSQL_PASSWORD=mypassword
+
+  filecoin_uploader:
+    build: ./services/filecoin_uploader
+    container_name: filecoin_uploader
+    restart: always
+    depends_on:
+      - transcript_builder
+    volumes:
+      - ./data:/app/data
+    environment:
+      - MYSQL_HOST=mariadb
+      - MYSQL_DATABASE=iot_data
+      - MYSQL_USER=myuser
+      - MYSQL_PASSWORD=mypassword
+      - LIGHTHOUSE_API_KEY=${LIGHTHOUSE_API_KEY:-}
 
 # Định nghĩa các volume để lưu trữ dữ liệu bền bỉ
 volumes:
