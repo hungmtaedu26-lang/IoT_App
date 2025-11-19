@@ -1,0 +1,41 @@
+{
+  "trace_id": "90:15:06:D7:36:D4_2025-11-18",
+  "mac": "90:15:06:D7:36:D4",
+  "date": "2025-11-18",
+  "time_range": {
+    "start": "2025-11-18T08:28:26Z",
+    "end": "2025-11-18T13:48:54Z"
+  },
+  "sensor_stats": {
+    "count": 15197,
+    "bpm_min": 0.0,
+    "bpm_max": 117.0,
+    "bpm_avg": 96.5038494439692,
+    "spo2_min": 0.0,
+    "spo2_max": 97.0,
+    "spo2_avg": 95.26360465881424,
+    "temp_min": 34.0,
+    "temp_max": 43.0,
+    "temp_avg": 37.80864644337698,
+    "ax_g_min": 515.0,
+    "ax_g_max": 787.0,
+    "ax_g_avg": 604.9946700006581,
+    "valid_bpm_count": 15197,
+    "valid_spo2_count": 15197,
+    "finger_detected_count": 15197
+  },
+  "ai_stats": {
+    "prediction_count": 15134,
+    "probability_min": 0.000231648,
+    "probability_max": 0.9995,
+    "probability_avg": 0.16291742939564327,
+    "anomaly_count": 2492,
+    "normal_count": 12642,
+    "anomaly_rate": 0.164662
+  },
+  "meta": {
+    "generated_at": "2025-11-19T00:47:15.764363Z",
+    "source": "mariadb",
+    "version": "1.0"
+  }
+}

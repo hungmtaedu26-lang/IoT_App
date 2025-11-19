@@ -23,7 +23,7 @@ MYSQL_USER = os.getenv("MYSQL_USER", "myuser")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "mypassword")
 
 TRANSCRIPTS_DIR = Path(os.getenv("TRANSCRIPTS_DIR", "/app/data/transcripts"))
-LOOP_INTERVAL = int(os.getenv("TRANSCRIPT_LOOP_INTERVAL_SEC", "300"))
+LOOP_INTERVAL = int(os.getenv("TRANSCRIPT_LOOP_INTERVAL_SEC", "60"))
 
 
 def connect_db_with_retry() -> mysql.connector.MySQLConnection:
@@ -67,6 +67,48 @@ def ensure_daily_transcripts_table(conn: mysql.connector.MySQLConnection) -> Non
     cursor = conn.cursor()
     try:
         cursor.execute(query)
+        conn.commit()
+    finally:
+        cursor.close()
+
+
+def ensure_source_tables(conn: mysql.connector.MySQLConnection) -> None:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sensor_readings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                mac_address VARCHAR(64) NOT NULL,
+                ax_g FLOAT,
+                temp FLOAT,
+                bpm FLOAT,
+                spo2 FLOAT,
+                validBPM TINYINT(1),
+                validSPO2 TINYINT(1),
+                finger_detected TINYINT(1),
+                rssi INT,
+                received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_sensor_mac_time (mac_address, received_at)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ai_predictions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                mac_address VARCHAR(64) NOT NULL,
+                probability FLOAT NOT NULL,
+                prediction TINYINT(1) NOT NULL,
+                bpm FLOAT,
+                spo2 FLOAT,
+                temp FLOAT,
+                ax_g FLOAT,
+                analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_prediction_mac_time (mac_address, analyzed_at)
+            )
+            """
+        )
         conn.commit()
     finally:
         cursor.close()
@@ -293,6 +335,7 @@ def process_day(conn: mysql.connector.MySQLConnection, target_date: date) -> Non
 def main() -> None:
     ensure_directories()
     conn = connect_db_with_retry()
+    ensure_source_tables(conn)
     ensure_daily_transcripts_table(conn)
 
     try:
@@ -303,6 +346,7 @@ def main() -> None:
                 if not conn.is_connected():
                     conn.close()
                     conn = connect_db_with_retry()
+                    ensure_source_tables(conn)
                     ensure_daily_transcripts_table(conn)
                 process_day(conn, target_date)
             time.sleep(LOOP_INTERVAL)

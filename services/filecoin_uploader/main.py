@@ -29,7 +29,7 @@ FILECOIN_DIR = Path(os.getenv("FILECOIN_DIR", "/app/data/filecoin"))
 LIGHTHOUSE_API_KEY = os.getenv("LIGHTHOUSE_API_KEY")
 LIGHTHOUSE_UPLOAD_URL = os.getenv(
     "LIGHTHOUSE_UPLOAD_URL",
-    "https://node.lighthouse.storage/api/v0/add",
+    "https://upload.lighthouse.storage/api/v0/add",
 )
 
 
