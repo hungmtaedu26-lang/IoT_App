@@ -1,0 +1,19 @@
+{
+  "provider": "lighthouse",
+  "cid": "QmZzju7zJ4G5Mp7Jn1dWv8uPjtJrMasBRmkPG4d2DoZxRh",
+  "deal_id": null,
+  "transcript": "90:15:06:D7:36:D4_2025-12-02.json",
+  "mac": "90:15:06:D7:36:D4",
+  "date": "2025-12-02",
+  "trace_id": "90:15:06:D7:36:D4_2025-12-02",
+  "hash_transcript": "13475403d74f401b5d2daee456025f63abc4641325410173e14378772059792b",
+  "size_bytes": 1002,
+  "response": {
+    "Name": "90:15:06:D7:36:D4_2025-12-02_encrypted.bin",
+    "Hash": "QmZzju7zJ4G5Mp7Jn1dWv8uPjtJrMasBRmkPG4d2DoZxRh",
+    "Size": "1029"
+  },
+  "uploaded_at": "2025-12-02T05:48:40.727316Z",
+  "encryption": "QKD-AES-GCM",
+  "encrypted_file": "90:15:06:D7:36:D4_2025-12-02_encrypted.bin"
+}

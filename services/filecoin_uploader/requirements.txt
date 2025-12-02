@@ -1,3 +1,6 @@
 mysql-connector-python
 requests
 watchfiles
+qiskit
+qiskit-aer
+cryptography

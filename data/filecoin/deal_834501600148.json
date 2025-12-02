@@ -1,0 +1,15 @@
+{
+  "provider": "mock",
+  "cid": "d8030be23dc8b37016106bd72d6c36b27988f25764e19287b9a076bd64191b3e",
+  "deal_id": "834501600148",
+  "transcript": "90:15:06:D7:36:D4_2025-12-02.json",
+  "mac": "90:15:06:D7:36:D4",
+  "date": "2025-12-02",
+  "trace_id": "90:15:06:D7:36:D4_2025-12-02",
+  "hash_transcript": "c8f3aa89827bb0243000499345e21395e805e9ec8a3c2f8ddb7225780a090bd0",
+  "size_bytes": 1006,
+  "status": "submitted",
+  "generated_at": "2025-12-02T05:13:45.675596Z",
+  "encryption": "QKD-AES-GCM",
+  "encrypted_file": "90:15:06:D7:36:D4_2025-12-02_encrypted.bin"
+}

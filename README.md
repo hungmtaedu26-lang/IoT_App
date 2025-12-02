@@ -74,3 +74,27 @@ python test_prediction.py --participant D1
 
 # dùng đúng 64 dòng bắt đầu từ vị trí 128 của N3
 python test_prediction.py -p N3 --start 128
+
+==================================
+# Thực hiện kiểm tra việc giải mã file đã được mã hóa bởi quantum key distribution
+# Lưu ý: Cần chạy bên trong container hoặc môi trường có cài thư viện
+docker exec -it filecoin_uploader python verify_encrypted_file.py <TRACE_ID>
+
+# Ví dụ
+docker exec -it filecoin_uploader python verify_encrypted_file.py 90:15:06:D7:36:D4_2025-12-02
+
+
+===================================
+Để giải mã file bạn đã tải về bằng key lấy từ DBeaver, tôi đã tạo một công cụ chuyên dụng cho việc này là manual_decrypt.py.
+
+Cách sử dụng:
+
+Cài đặt thư viện (nếu chưa có): Mở terminal (PowerShell) và chạy:
+# pip install cryptography
+Chạy công cụ:
+# python manual_decrypt.py
+# Nhập thông tin theo yêu cầu:
+# File path: Đường dẫn đến file bạn đã tải về (ví dụ: C:\Downloads\90_15_06_D7_36_D4_2025-12-02_encrypted.bin).
+# enc_key: Copy chuỗi trong cột enc_key từ bảng qkd_keys trên DBeaver và paste vào.
+# nonce: Copy chuỗi trong cột nonce từ DBeaver và paste vào.
+# Chương trình sẽ giải mã và lưu file kết quả ngay tại thư mục đó (đuôi .decrypted.json).

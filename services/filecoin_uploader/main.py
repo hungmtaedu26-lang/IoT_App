@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import base64
 from datetime import date, datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -11,6 +12,9 @@ import mysql.connector
 import requests
 from mysql.connector import Error
 from watchfiles import Change, watch
+
+# Import QKD Service
+from qkd_service import QKDSimulator
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -53,6 +57,8 @@ def connect_db_with_retry() -> mysql.connector.MySQLConnection:
 def ensure_directories() -> None:
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
     FILECOIN_DIR.mkdir(parents=True, exist_ok=True)
+    (FILECOIN_DIR / "encrypted").mkdir(parents=True, exist_ok=True)
+    (FILECOIN_DIR / "metadata").mkdir(parents=True, exist_ok=True)
 
 
 def ensure_daily_transcripts_table(conn: mysql.connector.MySQLConnection) -> None:
@@ -70,6 +76,25 @@ def ensure_daily_transcripts_table(conn: mysql.connector.MySQLConnection) -> Non
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_mac_date (mac_address, date)
+    )
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query)
+        conn.commit()
+    finally:
+        cursor.close()
+
+
+def ensure_qkd_keys_table(conn: mysql.connector.MySQLConnection) -> None:
+    query = """
+    CREATE TABLE IF NOT EXISTS qkd_keys (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        trace_id VARCHAR(128) NOT NULL,
+        enc_key TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_trace_id (trace_id)
     )
     """
     cursor = conn.cursor()
@@ -133,9 +158,9 @@ def resolve_metadata_path(
     deal_id: Optional[str],
 ) -> Optional[Path]:
     if provider == "lighthouse" and cid:
-        return FILECOIN_DIR / f"lighthouse_{cid}.json"
+        return FILECOIN_DIR / "metadata" / f"lighthouse_{cid}.json"
     if provider == "mock" and deal_id:
-        return FILECOIN_DIR / f"deal_{deal_id}.json"
+        return FILECOIN_DIR / "metadata" / f"deal_{deal_id}.json"
     return None
 
 
@@ -154,14 +179,39 @@ def update_status(
         query = """
         UPDATE daily_transcripts
         SET status = %s,
-            filecoin_cid = %s,
-            filecoin_deal_id = %s,
-            filecoin_provider = %s,
-            updated_at = CURRENT_TIMESTAMP
+        filecoin_cid = %s,
+        filecoin_deal_id = %s,
+        filecoin_provider = %s,
+        updated_at = CURRENT_TIMESTAMP
         WHERE mac_address = %s
           AND date = %s
         """
         cursor.execute(query, (status, cid, deal_id, provider, mac, date_value))
+        conn.commit()
+    finally:
+        cursor.close()
+
+
+def save_qkd_key(
+    conn: mysql.connector.MySQLConnection,
+    trace_id: str,
+    key_bytes: bytes,
+    nonce_bytes: bytes,
+) -> None:
+    key_b64 = base64.b64encode(key_bytes).decode('utf-8')
+    nonce_b64 = base64.b64encode(nonce_bytes).decode('utf-8')
+    
+    query = """
+    INSERT INTO qkd_keys (trace_id, enc_key, nonce)
+    VALUES (%s, %s, %s)
+    ON DUPLICATE KEY UPDATE
+        enc_key = VALUES(enc_key),
+        nonce = VALUES(nonce),
+        created_at = CURRENT_TIMESTAMP
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, (trace_id, key_b64, nonce_b64))
         conn.commit()
     finally:
         cursor.close()
@@ -180,9 +230,9 @@ def _mock_deal(content: bytes) -> Tuple[str, str]:
     return deal_id, cid
 
 
-def _lighthouse_upload(transcript_path: Path) -> Dict:
-    with open(transcript_path, "rb") as f:
-        files = {"file": (transcript_path.name, f, "application/json")}
+def _lighthouse_upload(file_path: Path) -> Dict:
+    with open(file_path, "rb") as f:
+        files = {"file": (file_path.name, f, "application/json")}
         headers = {"Authorization": f"Bearer {LIGHTHOUSE_API_KEY}"}
         response = requests.post(
             LIGHTHOUSE_UPLOAD_URL,
@@ -230,13 +280,14 @@ def _extract_deal_id_from_obj(obj: Dict) -> Optional[str]:
 
 
 def write_metadata_file(filename: str, payload: Dict) -> Path:
-    path = FILECOIN_DIR / filename
+    path = FILECOIN_DIR / "metadata" / filename
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     return path
 
 
 def handle_upload(
+    conn: mysql.connector.MySQLConnection,
     transcript_path: Path,
     transcript: Dict,
     content_bytes: bytes,
@@ -247,10 +298,51 @@ def handle_upload(
     hash_transcript = poseidon_like_hash(content_bytes)
     size_bytes = len(content_bytes)
 
-    if not LIGHTHOUSE_API_KEY:
-        deal_id, cid = _mock_deal(content_bytes)
+    # --- QKD ENCRYPTION STEP ---
+    logger.info(f"Starting QKD encryption for {trace_id}...")
+    qkd = QKDSimulator()
+    encrypted_data, nonce, key = qkd.encrypt_data(content_bytes)
+    
+    # Save key to DB
+    save_qkd_key(conn, trace_id, key, nonce)
+    
+    # Write encrypted data to a temporary file for upload
+    # We add a suffix to indicate it is encrypted
+    enc_filename = f"{transcript_path.stem}_encrypted.bin"
+    # Save to 'encrypted' subdirectory for inspection
+    enc_path = FILECOIN_DIR / "encrypted" / enc_filename
+    with open(enc_path, "wb") as f:
+        f.write(encrypted_data)
+    
+    logger.info(f"Data encrypted. Uploading encrypted file {enc_filename}...")
+    # ---------------------------
+
+    try:
+        if not LIGHTHOUSE_API_KEY:
+            deal_id, cid = _mock_deal(encrypted_data) # Use encrypted data for mock deal hash
+            metadata = {
+                "provider": "mock",
+                "cid": cid,
+                "deal_id": deal_id,
+                "transcript": transcript_path.name,
+                "mac": mac,
+                "date": date_str,
+                "trace_id": trace_id,
+                "hash_transcript": hash_transcript, # Original hash
+                "size_bytes": size_bytes,
+                "status": "submitted",
+                "generated_at": isoformat_now(),
+                "encryption": "QKD-AES-GCM",
+                "encrypted_file": enc_filename
+            }
+            write_metadata_file(f"deal_{deal_id}.json", metadata)
+            return "mock", cid, deal_id
+
+        response = _lighthouse_upload(enc_path)
+        cid = _extract_cid_from_response(response, hash_transcript)
+        deal_id = _extract_deal_from_response(response)
         metadata = {
-            "provider": "mock",
+            "provider": "lighthouse",
             "cid": cid,
             "deal_id": deal_id,
             "transcript": transcript_path.name,
@@ -259,30 +351,18 @@ def handle_upload(
             "trace_id": trace_id,
             "hash_transcript": hash_transcript,
             "size_bytes": size_bytes,
-            "status": "submitted",
-            "generated_at": isoformat_now(),
+            "response": response,
+            "uploaded_at": isoformat_now(),
+            "encryption": "QKD-AES-GCM",
+            "encrypted_file": enc_filename
         }
-        write_metadata_file(f"deal_{deal_id}.json", metadata)
-        return "mock", cid, deal_id
-
-    response = _lighthouse_upload(transcript_path)
-    cid = _extract_cid_from_response(response, hash_transcript)
-    deal_id = _extract_deal_from_response(response)
-    metadata = {
-        "provider": "lighthouse",
-        "cid": cid,
-        "deal_id": deal_id,
-        "transcript": transcript_path.name,
-        "mac": mac,
-        "date": date_str,
-        "trace_id": trace_id,
-        "hash_transcript": hash_transcript,
-        "size_bytes": size_bytes,
-        "response": response,
-        "uploaded_at": isoformat_now(),
-    }
-    write_metadata_file(f"lighthouse_{cid}.json", metadata)
-    return "lighthouse", cid, deal_id or ""
+        write_metadata_file(f"lighthouse_{cid}.json", metadata)
+        return "lighthouse", cid, deal_id or ""
+    finally:
+        # Clean up temp file
+        # if enc_path.exists():
+        #     enc_path.unlink()
+        pass
 
 
 def process_transcript_file(
@@ -308,6 +388,10 @@ def process_transcript_file(
 
     try:
         date_value = datetime.strptime(date_str, "%Y-%m-%d").date()
+        today_date = datetime.utcnow().date()
+        if date_value != today_date:
+            logger.info("Skipping old transcript %s (date: %s, today: %s)", path.name, date_str, today_date)
+            return
     except ValueError:
         logger.warning("Transcript %s has invalid date: %s", path, date_str)
         return
@@ -340,7 +424,8 @@ def process_transcript_file(
     update_status(conn, mac, date_value, "uploading")
 
     try:
-        provider, cid, deal_id = handle_upload(path, transcript, content_bytes)
+        # Pass conn to handle_upload for DB operations
+        provider, cid, deal_id = handle_upload(conn, path, transcript, content_bytes)
         update_status(conn, mac, date_value, "uploaded", cid=cid, deal_id=deal_id, provider=provider)
         processed_hashes[trace_id] = content_hash
         logger.info(
@@ -372,6 +457,7 @@ def monitor() -> None:
     ensure_directories()
     conn = connect_db_with_retry()
     ensure_daily_transcripts_table(conn)
+    ensure_qkd_keys_table(conn)  # Ensure the new table exists
 
     processed_hashes: Dict[str, str] = {}
     initial_scan(conn, processed_hashes)
@@ -388,6 +474,7 @@ def monitor() -> None:
                     conn.close()
                     conn = connect_db_with_retry()
                     ensure_daily_transcripts_table(conn)
+                    ensure_qkd_keys_table(conn)
                 process_transcript_file(conn, path, processed_hashes)
     except KeyboardInterrupt:
         logger.info("Filecoin uploader stopped.")
